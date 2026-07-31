@@ -5,7 +5,7 @@
   flex-direction: column;
   height: 100%;
   font-family: var(--font-chrome);
-  color: var(--color-text-primary);
+  color: var(--color-text);
 }
 
 /* ── Title bar ──────────────────────────────────────────────── */
@@ -13,9 +13,9 @@
 .titlebar {
   flex-shrink: 0;
   height: var(--titlebar-height);
-  background: var(--color-titlebar);
+  background: var(--color-titlebar-bg);
   border-bottom: 1px solid var(--color-titlebar-border);
-  /* Three columns: brand | docname | status — docname stays centred */
+  /* Three columns: brand | docname | right-actions — docname stays centred */
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
@@ -29,7 +29,7 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  color: var(--color-brand);
+  color: var(--color-accent);
   user-select: none;
 }
 
@@ -37,23 +37,24 @@
   font-size: 13px;
   font-weight: 600;
   letter-spacing: -0.015em;
-  color: var(--color-brand);
+  color: var(--color-accent);
 }
 
 .titlebar-docname {
   font-size: 13px;
   font-weight: 500;
-  color: var(--color-text-primary);
+  color: var(--color-text);
   max-width: 360px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.titlebar-status {
+.titlebar-right {
   display: flex;
   justify-content: flex-end;
   align-items: center;
+  gap: 10px;
 }
 
 /* ── Status badge ───────────────────────────────────────────── */
@@ -62,19 +63,72 @@
   font-size: 12px;
   color: var(--color-text-muted);
   white-space: nowrap;
+  line-height: 1;
 }
 
 .status-badge--loading {
   animation: status-pulse 1.6s ease-in-out infinite;
 }
 
-.status-badge--error {
+.status-badge--load-error {
+  color: var(--color-error);
+}
+
+.status-badge--saved {
+  animation: status-fade-saved 3.2s ease forwards;
+}
+
+.status-badge--stale {
+  color: var(--color-warning);
+  font-size: 12px;
+}
+
+.status-badge--conflict,
+.status-badge--save-error {
   color: var(--color-error);
 }
 
 @keyframes status-pulse {
   0%, 100% { opacity: 1;    }
   50%       { opacity: 0.4; }
+}
+
+/* "Saved" stays solid for ~1.5s then gently fades away */
+@keyframes status-fade-saved {
+  0%, 46%  { opacity: 1; }
+  100%     { opacity: 0; }
+}
+
+/* ── Theme toggle ────────────────────────────────────────────── */
+
+.theme-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  transition: background 120ms ease, color 120ms ease;
+  flex-shrink: 0;
+}
+
+.theme-toggle:hover {
+  background: var(--color-control-hover);
+  color: var(--color-text);
+}
+
+.theme-toggle:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.theme-toggle:active {
+  background: var(--color-control-active);
 }
 
 /* ── Canvas (the scrollable grey field) ─────────────────────── */
@@ -125,23 +179,36 @@
 
 .skeleton-bone {
   border-radius: 3px;
-  background-color: #edecea;
+  background-color: var(--color-rule);
   position: relative;
   overflow: hidden;
 }
 
-/* Shimmer: a white highlight sweeps left → right over the base grey */
+/* Shimmer sweeps across the bone; colour adapts to theme via opacity */
 .skeleton-bone::after {
   content: "";
   position: absolute;
   inset: 0;
   background: linear-gradient(
     90deg,
-    transparent    0%,
-    rgba(255, 255, 255, 0.45) 50%,
-    transparent   100%
+    transparent                   0%,
+    rgba(255, 255, 255, 0.10) 50%,
+    transparent                 100%
   );
   animation: shimmer 1.5s ease-in-out infinite;
+}
+
+:root[data-theme="light"] .skeleton-bone {
+  background-color: #edecea;
+}
+
+:root[data-theme="light"] .skeleton-bone::after {
+  background: linear-gradient(
+    90deg,
+    transparent               0%,
+    rgba(255, 255, 255, 0.45) 50%,
+    transparent              100%
+  );
 }
 
 @keyframes shimmer {
@@ -161,7 +228,6 @@
 .error-view-icon {
   color: var(--color-error);
   margin-bottom: 8px;
-  /* Ensure the SVG stroke inherits the colour */
   stroke: currentColor;
 }
 
@@ -169,13 +235,13 @@
   margin: 0;
   font-size: 16px;
   font-weight: 600;
-  color: var(--color-text-primary);
+  color: var(--color-text);
 }
 
 .error-view-message {
   margin: 0;
   font-size: 14px;
   line-height: 1.5;
-  color: var(--color-text-secondary);
+  color: var(--color-text-muted);
   max-width: 480px;
 }

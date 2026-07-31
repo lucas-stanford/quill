@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { LoadStatus, SaveState } from "../types";
+import { useTheme } from "../theme";
 import "./AppShell.css";
 
 /** FROZEN PROP CONTRACT — the shape may not change; the implementation is yours. */
@@ -26,8 +27,11 @@ export function AppShell({ docName, status, error, saveState, toolbar, children 
           <span className="titlebar-wordmark">Quill</span>
         </div>
         <span className="titlebar-docname">{docName}</span>
-        <div className="titlebar-status" aria-live="polite" aria-atomic="true">
-          <StatusBadge status={status} saveState={saveState} />
+        <div className="titlebar-right">
+          <div aria-live="polite" aria-atomic="true">
+            <StatusBadge status={status} saveState={saveState} />
+          </div>
+          <ThemeToggle />
         </div>
       </header>
 
@@ -45,6 +49,73 @@ export function AppShell({ docName, status, error, saveState, toolbar, children 
         </div>
       </main>
     </div>
+  );
+}
+
+/* ── Theme toggle ─────────────────────────────────────────────
+   Small sun/moon button in the right end of the title bar. */
+
+function ThemeToggle() {
+  const [theme, setTheme] = useTheme();
+  const isDark = theme === "dark";
+  const next = isDark ? "light" : "dark";
+  const label = isDark ? "Switch to light mode" : "Switch to dark mode";
+
+  return (
+    <button
+      className="theme-toggle"
+      aria-label={label}
+      title={label}
+      onClick={() => setTheme(next)}
+    >
+      {isDark ? <SunIcon /> : <MoonIcon />}
+    </button>
+  );
+}
+
+function SunIcon() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 16 16"
+      width="16"
+      height="16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <circle cx="8" cy="8" r="2.8" />
+      <line x1="8" y1="1.2" x2="8" y2="2.6" />
+      <line x1="8" y1="13.4" x2="8" y2="14.8" />
+      <line x1="1.2" y1="8" x2="2.6" y2="8" />
+      <line x1="13.4" y1="8" x2="14.8" y2="8" />
+      <line x1="3.1" y1="3.1" x2="4.1" y2="4.1" />
+      <line x1="11.9" y1="11.9" x2="12.9" y2="12.9" />
+      <line x1="12.9" y1="3.1" x2="11.9" y2="4.1" />
+      <line x1="4.1" y1="11.9" x2="3.1" y2="12.9" />
+    </svg>
+  );
+}
+
+function MoonIcon() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 16 16"
+      width="16"
+      height="16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {/* Crescent: a filled arc minus the moon's night-side circle */}
+      <path d="M13.5 10.5A6 6 0 0 1 5.5 2.5 6 6 0 1 0 13.5 10.5z" />
+    </svg>
   );
 }
 
@@ -78,19 +149,43 @@ function QuillNib() {
 }
 
 /* ── Status badge ─────────────────────────────────────────────
-   Shown right-aligned in the title bar. Ready state is silent. */
+   Human copy modelled on Word's "Saved" indicator.
+   aria-live="polite" wraps this in AppShell so changes are announced. */
 
 function StatusBadge({ status, saveState }: { status: LoadStatus; saveState?: SaveState }) {
   if (status === "loading") {
     return <span className="status-badge status-badge--loading">Opening…</span>;
   }
   if (status === "error") {
-    return <span className="status-badge status-badge--error">Error</span>;
+    return <span className="status-badge status-badge--load-error">Failed to open</span>;
   }
-  if (saveState && saveState !== "idle") {
-    return <span className="status-badge">{saveState}</span>;
+
+  /* status === "ready" */
+  switch (saveState) {
+    case "dirty":
+      return <span className="status-badge">Unsaved changes</span>;
+    case "saving":
+      return <span className="status-badge">Saving…</span>;
+    case "saved":
+      /* Fades out after ~1.5 s via CSS animation */
+      return <span className="status-badge status-badge--saved">Saved</span>;
+    case "stale":
+      return (
+        <span className="status-badge status-badge--stale" title="The file was modified on disk while you had unsaved edits. Your edits are intact but the document is out of step with the saved file.">
+          File changed on disk — your edits kept
+        </span>
+      );
+    case "conflict":
+      return (
+        <span className="status-badge status-badge--conflict" title="Your edits are still in the editor but were NOT written to disk. Save was rejected because the file was modified externally.">
+          Not saved — file was modified externally
+        </span>
+      );
+    case "error":
+      return <span className="status-badge status-badge--save-error">Save failed</span>;
+    default:
+      return null;
   }
-  return null;
 }
 
 /* ── Loading skeleton ─────────────────────────────────────────
@@ -169,3 +264,4 @@ function TriangleAlert() {
     </svg>
   );
 }
+

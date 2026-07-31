@@ -1,30 +1,73 @@
+/*
+ * Design tokens — dark is the default theme.
+ * Every colour used anywhere in the app must trace back to one of these tokens.
+ * The ribbon lane owns this file; every other lane must consume, not define, colours.
+ *
+ * Token contract (shared with roundtrip lane):
+ *   --color-canvas, --color-page, --color-page-border, --color-shadow
+ *   --color-text, --color-text-muted, --color-heading
+ *   --color-rule, --color-link, --color-accent, --color-selection
+ *   --color-code-bg, --color-code-border, --color-code-text
+ *   --color-inline-code-bg, --color-inline-code-text
+ *   --color-titlebar-bg, --color-titlebar-border
+ *   --color-control-hover, --color-control-active
+ */
+
 :root {
-  color-scheme: light;
+  color-scheme: dark;
 
-  /* ── Palette (Fluent neutral scale + Office blue) ───────── */
-  --color-canvas:           #f3f2f1;  /* warm grey field behind the page */
-  --color-page:             #ffffff;  /* the white sheet */
-  --color-titlebar:         #ffffff;
-  --color-titlebar-border:  #edebe9;
-  --color-brand:            #106ebe;  /* Office / Fluent blue */
-  --color-text-primary:     #201f1e;
-  --color-text-secondary:   #605e5c;
-  --color-text-muted:       #a19f9d;
-  --color-error:            #a80000;
+  /* ── Canvas and page surface ─────────────────────────────── */
+  /* Deep charcoal canvas with a lifted near-black page — clearly distinct surfaces */
+  --color-canvas:          #17171a;   /* deep charcoal field behind the page */
+  --color-page:            #232326;   /* near-black page, lifted above the canvas */
+  --color-page-border:     #38383c;   /* subtle edge — replaces hard-to-see shadow */
+  --color-shadow:          rgba(0, 0, 0, 0.55);
 
-  /* ── Page metrics ───────────────────────────────────────── */
+  /* ── Text ────────────────────────────────────────────────── */
+  /* #e6e6e6 on #232326 ≈ 11.7:1 contrast — well above WCAG AA (4.5:1) */
+  --color-text:            #e6e6e6;   /* body text — softer than pure white */
+  --color-text-muted:      #8a8a8e;   /* secondary / status copy */
+  --color-heading:         #f0f0f0;   /* slightly brighter for typographic hierarchy */
+
+  /* ── Decoration ──────────────────────────────────────────── */
+  --color-rule:            #38383c;   /* horizontal rules and hairlines */
+  --color-link:            #6ab4f5;   /* blue legible on dark backgrounds */
+  --color-accent:          #4fa3e0;   /* brand / active-control colour */
+  --color-selection:       rgba(74, 160, 224, 0.28);
+
+  /* ── Code ────────────────────────────────────────────────── */
+  --color-code-bg:         #1c1c1f;   /* code block — slightly darker than page */
+  --color-code-border:     #38383c;
+  --color-code-text:       #d4d4d4;   /* muted white, classic terminal look */
+  --color-inline-code-bg:  #2d2d30;
+  --color-inline-code-text:#e8909e;   /* muted rose — distinguishes code in prose */
+
+  /* ── Title bar and ribbon ────────────────────────────────── */
+  --color-titlebar-bg:     #1c1c1f;   /* slightly darker than page */
+  --color-titlebar-border: #2d2d30;
+
+  /* ── Interactive controls ────────────────────────────────── */
+  --color-control-hover:   rgba(255, 255, 255, 0.07);
+  --color-control-active:  rgba(74, 160, 224, 0.20);
+
+  /* ── Shell-only extras (not in shared contract) ──────────── */
+  --color-error:           #ff6b6b;   /* save errors, load errors */
+  --color-warning:         #f4c542;   /* stale-state indicator */
+
+  /* ── Page metrics ────────────────────────────────────────── */
   /* US Letter at 96 dpi — 816 × 1056 px; 1 in = 96 px */
   --page-width:       816px;
   --page-padding-h:    96px;  /* 1-inch horizontal margin */
   --page-padding-v:    72px;  /* 0.75-inch top/bottom padding */
   --page-min-height: 1056px;
   --page-shadow:
-    0 1px 3px  rgba(0, 0, 0, 0.04),
-    0 4px 20px rgba(0, 0, 0, 0.08);
+    0 1px 2px rgba(0, 0, 0, 0.45),
+    0 0   0  1px var(--color-page-border);
   --page-radius: 2px;
 
   /* ── Chrome metrics ─────────────────────────────────────── */
   --titlebar-height:    48px;
+  --ribbon-height:      38px;
   --canvas-pad-top:     36px;
   --canvas-pad-bottom:  64px;
 
@@ -32,6 +75,46 @@
   --font-chrome:
     -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui,
     Arial, sans-serif;
+}
+
+/* ── Light theme overrides ───────────────────────────────── */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  /* Word-on-the-web look: warm grey field, clean white sheet */
+  --color-canvas:          #f3f2f1;
+  --color-page:            #ffffff;
+  --color-page-border:     transparent;
+  --color-shadow:          rgba(0, 0, 0, 0.08);
+
+  /* #201f1e on #ffffff ≈ 14.3:1 contrast — well above WCAG AA */
+  --color-text:            #201f1e;
+  --color-text-muted:      #8a8887;
+  --color-heading:         #1a1918;
+
+  --color-rule:            #e0dede;
+  --color-link:            #106ebe;   /* Office / Fluent blue */
+  --color-accent:          #106ebe;
+  --color-selection:       rgba(16, 110, 190, 0.20);
+
+  --color-code-bg:         #f5f7fa;
+  --color-code-border:     #dde1e7;
+  --color-code-text:       #1a1a1a;
+  --color-inline-code-bg:  #eef0f3;
+  --color-inline-code-text:#b0313f;   /* muted crimson */
+
+  --color-titlebar-bg:     #ffffff;
+  --color-titlebar-border: #edebe9;
+
+  --color-control-hover:   rgba(0, 0, 0, 0.05);
+  --color-control-active:  rgba(16, 110, 190, 0.12);
+
+  --color-error:           #a80000;
+  --color-warning:         #a55600;
+
+  --page-shadow:
+    0 1px 3px  rgba(0, 0, 0, 0.04),
+    0 4px 20px rgba(0, 0, 0, 0.08);
 }
 
 *,

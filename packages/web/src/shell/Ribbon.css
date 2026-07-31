@@ -1,0 +1,105 @@
+/* ── Ribbon bar ─────────────────────────────────────────────── */
+
+.ribbon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  height: var(--ribbon-height);
+  padding-inline: 12px;
+  gap: 2px;
+  background: var(--color-titlebar-bg);
+  border-bottom: 1px solid var(--color-titlebar-border);
+}
+
+/* ── Group separator ─────────────────────────────────────────── */
+
+.ribbon-sep {
+  display: inline-block;
+  width: 1px;
+  height: 18px;
+  background: var(--color-rule);
+  margin-inline: 6px;
+  flex-shrink: 0;
+}
+
+/* ── Style select (block type dropdown) ─────────────────────── */
+
+.ribbon-style-select {
+  height: 26px;
+  min-width: 126px;
+  padding: 0 6px;
+  border: 1px solid var(--color-rule);
+  border-radius: 3px;
+  background: var(--color-titlebar-bg);
+  color: var(--color-text);
+  font-family: var(--font-chrome);
+  font-size: 12px;
+  cursor: pointer;
+  /* Inherit color-scheme so native dropdown popup matches the theme */
+  color-scheme: inherit;
+  transition: border-color 120ms ease;
+}
+
+.ribbon-style-select:hover:not(:disabled) {
+  border-color: var(--color-text-muted);
+}
+
+.ribbon-style-select:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+  border-color: var(--color-accent);
+}
+
+.ribbon-style-select:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ── Ribbon button ───────────────────────────────────────────── */
+
+.ribbon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  cursor: pointer;
+  color: var(--color-text);
+  flex-shrink: 0;
+  transition: background 100ms ease, border-color 100ms ease, color 100ms ease;
+}
+
+.ribbon-btn:hover:not(:disabled) {
+  background: var(--color-control-hover);
+  border-color: var(--color-rule);
+}
+
+.ribbon-btn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.ribbon-btn:active:not(:disabled) {
+  background: var(--color-control-active);
+}
+
+/* Pressed / active state — mark is currently applied at the caret */
+.ribbon-btn--active {
+  background: var(--color-control-active);
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.ribbon-btn--active:hover:not(:disabled) {
+  background: var(--color-control-active);
+  filter: brightness(1.1);
+}
+
+.ribbon-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
