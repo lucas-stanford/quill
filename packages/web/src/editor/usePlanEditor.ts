@@ -1,8 +1,8 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useEditor } from "@tiptap/react";
 import type { Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import { marked } from "marked";
+import { markdownToJSON, docToMarkdown } from "../markdown";
 import "./editor.css";
 
 export interface UsePlanEditorOptions {
@@ -16,28 +16,47 @@ export interface UsePlanEditorOptions {
   onChange?: (markdown: string) => void;
 }
 
-function mdToHtml(src: string): string {
-  return marked(src, { async: false, gfm: true, breaks: false });
-}
-
 /**
- * SCAFFOLD — the roundtrip workstream replaces this with a lossless
- * markdown <-> ProseMirror implementation and wires `onChange`.
+ * Manages a Tiptap editor instance with lossless markdown round-trip.
+ *
+ * CRITICAL: onChange fires ONLY for real user edits, never for programmatic
+ * content loads. This is enforced two ways:
+ *   1. setContent is always called with { emitUpdate: false }, which sets the
+ *      "preventUpdate" transaction meta and suppresses the editor's "update"
+ *      event entirely.
+ *   2. A ref-based guard (updatingRef) provides a belt-and-suspenders check.
  */
-export function usePlanEditor({ markdown }: UsePlanEditorOptions): Editor | null {
+export function usePlanEditor({
+  markdown,
+  onChange,
+}: UsePlanEditorOptions): Editor | null {
+  // Guard: true while we are programmatically loading content
+  const updatingRef = useRef(false);
+  // Keep onChange stable across renders without re-creating the editor
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
   const editor = useEditor(
     {
       extensions: [StarterKit],
-      content: mdToHtml(markdown),
+      content: markdownToJSON(markdown),
       immediatelyRender: false,
       editable: true,
+      onUpdate: ({ editor: ed }) => {
+        if (updatingRef.current) return;
+        onChangeRef.current?.(docToMarkdown(ed.getJSON()));
+      },
     },
     [],
   );
 
   useEffect(() => {
     if (!editor || editor.isDestroyed) return;
-    editor.commands.setContent(mdToHtml(markdown), { emitUpdate: false });
+    updatingRef.current = true;
+    editor.commands.setContent(markdownToJSON(markdown), {
+      emitUpdate: false,
+    });
+    updatingRef.current = false;
   }, [editor, markdown]);
 
   return editor;
