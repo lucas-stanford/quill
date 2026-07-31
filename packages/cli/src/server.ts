@@ -1,10 +1,28 @@
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { readFile, writeFile, rename, stat, unlink, chmod } from "node:fs/promises";
+import { readFile, rename, stat } from "node:fs/promises";
 import { watch } from "node:fs";
-import { createHash } from "node:crypto";
-import { resolve, extname, normalize, basename, dirname } from "node:path";
-import type { PlanResponse, ErrorResponse, SavePlanRequest, ConflictResponse } from "./types.js";
+import { resolve, extname, basename, dirname } from "node:path";
+import type {
+  AnnotationsResponse,
+  ConflictResponse,
+  ErrorResponse,
+  PlanResponse,
+  SavePlanRequest,
+  Sidecar,
+} from "./types.js";
+import { hashContent } from "./hash.js";
+import { writeFileAtomic } from "./atomic.js";
+import { resolveStaticPath } from "./static-path.js";
+import {
+  EMPTY_SIDECAR_REVISION,
+  corruptBackupPathFor,
+  emptySidecar,
+  parseSidecar,
+  serializeSidecar,
+  sidecarPathFor,
+  validateSaveAnnotationsRequest,
+} from "./sidecar.js";
 
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -21,35 +39,22 @@ function mimeFor(filePath: string): string {
   return MIME[extname(filePath)] ?? "application/octet-stream";
 }
 
-function hashContent(content: string): string {
-  return createHash("sha256").update(content).digest("hex");
+/** 409 for PUT /api/annotations — the sidecar counterpart of ConflictResponse. */
+interface AnnotationsConflictResponse extends ErrorResponse {
+  current: AnnotationsResponse;
 }
 
-function sendJson(
-  res: ServerResponse,
-  status: number,
-  body: PlanResponse | ErrorResponse | ConflictResponse,
-): void {
+type JsonBody =
+  | PlanResponse
+  | ErrorResponse
+  | ConflictResponse
+  | AnnotationsResponse
+  | AnnotationsConflictResponse;
+
+function sendJson(res: ServerResponse, status: number, body: JsonBody): void {
   const json = JSON.stringify(body);
   res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
   res.end(json);
-}
-
-/**
- * Resolves a URL pathname to a file path inside webRoot.
- * Returns null if the resolved path escapes webRoot (path traversal guard).
- */
-function resolveStaticPath(webRoot: string, pathname: string): string | null {
-  const relative = pathname.replace(/^\/+/, "") || "index.html";
-  const resolved = resolve(webRoot, normalize(relative));
-
-  // Guard: resolved path must remain inside webRoot
-  const safePrefix = webRoot.endsWith("/") ? webRoot : webRoot + "/";
-  if (!resolved.startsWith(safePrefix) && resolved !== webRoot) {
-    return null;
-  }
-
-  return resolved;
 }
 
 // ---------------------------------------------------------------------------
@@ -121,6 +126,11 @@ function startWatcher(planPath: string, state: LiveState): void {
   const dir = dirname(planPath);
   const name = basename(planPath);
 
+  // Directory watch, filtered to the plan's own basename: the review sidecar
+  // (PLAN.quill.json), its quarantine backups and the .quill-tmp-* files an
+  // atomic write creates all live in this directory and must never reach the
+  // SSE stream. /api/live is only about the plan — saving annotations must not
+  // reload the document the user is typing into.
   const watcher = watch(dir, (_eventType, filename) => {
     if (filename !== name) return;
 
@@ -164,20 +174,25 @@ async function handleApiPlanGet(planPath: string, res: ServerResponse): Promise<
 
 const MAX_BODY_BYTES = 10 * 1024 * 1024; // 10 MB
 
+/** Shared by PUT /api/plan and PUT /api/annotations — one limit, one behaviour. */
 function readBody(req: IncomingMessage): Promise<string> {
-  return new Promise((resolve, reject) => {
+  return new Promise((fulfill, reject) => {
     let size = 0;
-    const chunks: Buffer[] = [];
+    let chunks: Buffer[] = [];
     req.on("data", (chunk: Buffer) => {
       size += chunk.length;
       if (size > MAX_BODY_BYTES) {
-        req.destroy();
+        // Stop buffering, but keep draining the request so the 400 the caller
+        // is about to send actually reaches the client instead of a reset.
+        chunks = [];
+        req.removeAllListeners("data");
+        req.resume();
         reject(new Error("Request body too large"));
         return;
       }
       chunks.push(chunk);
     });
-    req.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
+    req.on("end", () => fulfill(Buffer.concat(chunks).toString("utf-8")));
     req.on("error", reject);
   });
 }
@@ -247,25 +262,11 @@ async function handleApiPlanPut(
     return;
   }
 
-  // Atomic write: write to a temp file in the same directory, then rename.
-  // rename(2) within a directory is atomic; a crash mid-write leaves the
-  // original file intact.
-  const dir = dirname(planPath);
-  const tmpPath = resolve(
-    dir,
-    `.quill-tmp-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-  );
-
+  // Atomic write: temp file in the same directory, then rename. Shared with
+  // the sidecar writer so both endpoints have one crash-safe write path.
   try {
-    await writeFile(tmpPath, markdown, "utf-8");
-    await chmod(tmpPath, fileMode & 0o777);
-    await rename(tmpPath, planPath);
+    await writeFileAtomic(planPath, markdown, fileMode);
   } catch {
-    try {
-      await unlink(tmpPath);
-    } catch {
-      /* best-effort cleanup */
-    }
     sendJson(res, 500, { error: "Failed to write plan file" });
     return;
   }
@@ -280,6 +281,184 @@ async function handleApiPlanPut(
     markdown,
     revision: newHash,
   };
+  sendJson(res, 200, body);
+}
+
+// ---------------------------------------------------------------------------
+// Annotations (review sidecar)
+// ---------------------------------------------------------------------------
+
+interface SidecarState {
+  sidecar: Sidecar;
+  /** sha256 of exactly the bytes on disk, or of the canonical empty sidecar. */
+  revision: string;
+  status: "ok" | "missing" | "corrupt";
+  /** Set when status is "corrupt". */
+  reason?: string;
+  /** Permission bits of the file being replaced, when there is one. */
+  mode?: number;
+}
+
+type SidecarLoad =
+  | { kind: "state"; state: SidecarState }
+  | { kind: "io-error"; message: string };
+
+/**
+ * Reads the sidecar and classifies it.
+ *
+ * A missing sidecar is not an error — it degrades to the empty sidecar so Quill
+ * still works as a plain markdown editor on a plan that was never annotated.
+ *
+ * A sidecar that exists but cannot be understood (bad JSON, wrong shape,
+ * unknown version) also degrades to empty rather than refusing to open the
+ * document, but it is never discarded: the next write quarantines it (see
+ * handleApiAnnotationsPut) instead of overwriting it, and every read logs
+ * loudly. Reading is left free of side effects.
+ *
+ * A sidecar we cannot read at all (permissions, it's a directory) is a real
+ * fault and is reported as one — degrading there would risk clobbering a file
+ * whose contents we never saw.
+ */
+async function loadSidecarState(sidecarPath: string): Promise<SidecarLoad> {
+  let raw: string;
+  let mode: number;
+  try {
+    const [content, fileStats] = await Promise.all([
+      readFile(sidecarPath, "utf-8"),
+      stat(sidecarPath),
+    ]);
+    raw = content;
+    mode = fileStats.mode;
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") {
+      return {
+        kind: "state",
+        state: { sidecar: emptySidecar(), revision: EMPTY_SIDECAR_REVISION, status: "missing" },
+      };
+    }
+    return {
+      kind: "io-error",
+      message: `Failed to read ${basename(sidecarPath)}${code ? ` (${code})` : ""}`,
+    };
+  }
+
+  const parsed = parseSidecar(raw);
+  if (!parsed.ok) {
+    return {
+      kind: "state",
+      state: {
+        sidecar: emptySidecar(),
+        revision: EMPTY_SIDECAR_REVISION,
+        status: "corrupt",
+        reason: parsed.reason,
+        mode,
+      },
+    };
+  }
+
+  // The revision is the hash of the bytes actually on disk, so a GET after a
+  // PUT reports exactly the revision that PUT returned.
+  return {
+    kind: "state",
+    state: { sidecar: parsed.sidecar, revision: hashContent(raw), status: "ok", mode },
+  };
+}
+
+function warnCorruptSidecar(sidecarPath: string, reason: string | undefined): void {
+  console.error(
+    `quill: ${basename(sidecarPath)} could not be read — ${reason ?? "unknown problem"}`,
+  );
+  console.error(
+    "  Continuing with no comments. The file is left untouched; the next save moves it aside to a .corrupt-* backup rather than overwriting it.",
+  );
+}
+
+async function handleApiAnnotationsGet(sidecarPath: string, res: ServerResponse): Promise<void> {
+  const load = await loadSidecarState(sidecarPath);
+
+  if (load.kind === "io-error") {
+    sendJson(res, 500, { error: load.message });
+    return;
+  }
+
+  const { state } = load;
+  if (state.status === "corrupt") warnCorruptSidecar(sidecarPath, state.reason);
+
+  const body: AnnotationsResponse = { sidecar: state.sidecar, revision: state.revision };
+  sendJson(res, 200, body);
+}
+
+async function handleApiAnnotationsPut(
+  sidecarPath: string,
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> {
+  let rawBody: string;
+  try {
+    rawBody = await readBody(req);
+  } catch {
+    sendJson(res, 400, { error: "Request body too large" });
+    return;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawBody);
+  } catch {
+    sendJson(res, 400, { error: "Invalid JSON body" });
+    return;
+  }
+
+  const validated = validateSaveAnnotationsRequest(parsed);
+  if (!validated.ok) {
+    sendJson(res, 400, { error: validated.reason });
+    return;
+  }
+
+  const { sidecar, revision } = validated.request;
+
+  const load = await loadSidecarState(sidecarPath);
+  if (load.kind === "io-error") {
+    sendJson(res, 500, { error: load.message });
+    return;
+  }
+  const { state } = load;
+
+  if (state.revision !== revision) {
+    const conflict: AnnotationsConflictResponse = {
+      error: "The review sidecar has been modified since your last load — please reload",
+      current: { sidecar: state.sidecar, revision: state.revision },
+    };
+    sendJson(res, 409, conflict);
+    return;
+  }
+
+  if (state.status === "corrupt") {
+    // Never silently discard review data we failed to parse: move it aside,
+    // keeping the bytes, before writing a fresh sidecar in its place.
+    const backupPath = corruptBackupPathFor(sidecarPath);
+    try {
+      await rename(sidecarPath, backupPath);
+      console.error(`quill: moved unreadable ${basename(sidecarPath)} to ${basename(backupPath)}`);
+    } catch (err) {
+      sendJson(res, 500, {
+        error: `Refusing to overwrite an unreadable ${basename(sidecarPath)} — could not move it aside (${(err as Error).message})`,
+      });
+      return;
+    }
+  }
+
+  // Hash exactly the bytes written, and write exactly the bytes hashed.
+  const serialized = serializeSidecar(sidecar);
+  try {
+    await writeFileAtomic(sidecarPath, serialized, state.status === "ok" ? state.mode : undefined);
+  } catch {
+    sendJson(res, 500, { error: `Failed to write ${basename(sidecarPath)}` });
+    return;
+  }
+
+  const body: AnnotationsResponse = { sidecar, revision: hashContent(serialized) };
   sendJson(res, 200, body);
 }
 
@@ -320,20 +499,28 @@ function handleApiLive(
 }
 
 async function handleStatic(webRoot: string, pathname: string, res: ServerResponse): Promise<void> {
-  const filePath = resolveStaticPath(webRoot, pathname);
+  const resolved = resolveStaticPath(webRoot, pathname);
 
-  if (filePath === null) {
-    res.writeHead(403, { "Content-Type": "text/plain" });
-    res.end("Forbidden");
+  if (!resolved.ok) {
+    if (resolved.reason === "malformed") {
+      res.writeHead(400, { "Content-Type": "text/plain" });
+      res.end("Bad Request");
+    } else {
+      res.writeHead(403, { "Content-Type": "text/plain" });
+      res.end("Forbidden");
+    }
     return;
   }
+
+  const { filePath } = resolved;
 
   try {
     const data = await readFile(filePath);
     res.writeHead(200, { "Content-Type": mimeFor(filePath) });
     res.end(data);
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "EISDIR") {
       // SPA fallback: serve index.html for unknown paths that aren't /api
       try {
         const data = await readFile(resolve(webRoot, "index.html"));
@@ -355,6 +542,8 @@ async function handleStatic(webRoot: string, pathname: string, res: ServerRespon
 // ---------------------------------------------------------------------------
 
 function createHandler(planPath: string, webRoot: string, state: LiveState) {
+  const sidecarPath = sidecarPathFor(planPath);
+
   return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     let url: URL;
     try {
@@ -373,6 +562,18 @@ function createHandler(planPath: string, webRoot: string, state: LiveState) {
         await handleApiPlanGet(planPath, res);
       } else if (method === "PUT") {
         await handleApiPlanPut(planPath, req, res, state);
+      } else {
+        res.writeHead(405, { "Content-Type": "text/plain", Allow: "GET, PUT" });
+        res.end("Method Not Allowed");
+      }
+      return;
+    }
+
+    if (pathname === "/api/annotations") {
+      if (method === "GET") {
+        await handleApiAnnotationsGet(sidecarPath, res);
+      } else if (method === "PUT") {
+        await handleApiAnnotationsPut(sidecarPath, req, res);
       } else {
         res.writeHead(405, { "Content-Type": "text/plain", Allow: "GET, PUT" });
         res.end("Method Not Allowed");
