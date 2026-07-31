@@ -1,0 +1,147 @@
+/* Tracked changes.
+ *
+ * Every colour is a design token from the shell lane (styles/global.css). The
+ * `var(--token, fallback)` fallbacks exist only so this lane renders correctly
+ * on its own before the merge; once the shell defines the tokens they win, in
+ * both themes.
+ *
+ * Two axes have to be readable at a glance on a near-black page:
+ *   - WHAT happened: insertions are underlined, deletions are struck through,
+ *     each in its own colour (--color-insertion / --color-deletion).
+ *   - WHO did it: the text itself takes the author's colour
+ *     (--color-change-human / --color-change-ai).
+ */
+
+:root {
+  --quill-tc-insertion: var(--color-insertion, #4ec9a0);
+  --quill-tc-deletion: var(--color-deletion, #ff7b72);
+  --quill-tc-ai: var(--color-change-ai, #6ab4f5);
+  --quill-tc-human: var(--color-change-human, #e0a458);
+}
+
+/* Fallbacks tuned for a white page; the shell's tokens still take precedence. */
+:root[data-theme="light"] {
+  --quill-tc-insertion: var(--color-insertion, #0a7d5a);
+  --quill-tc-deletion: var(--color-deletion, #b3261e);
+  --quill-tc-ai: var(--color-change-ai, #0b5cad);
+  --quill-tc-human: var(--color-change-human, #8a5a00);
+}
+
+/* ── The changes themselves ───────────────────────────────────────────────
+ * Scoped under .ProseMirror so a change inside a link or a heading takes the
+ * author colour rather than inheriting the element's own. */
+
+.ProseMirror .quill-tc {
+  border-radius: 2px;
+  cursor: default;
+  transition: background-color 120ms ease;
+}
+
+.ProseMirror .quill-tc--human {
+  color: var(--quill-tc-human);
+}
+
+.ProseMirror .quill-tc--ai {
+  color: var(--quill-tc-ai);
+}
+
+.ProseMirror .quill-tc--insertion {
+  text-decoration-line: underline;
+  text-decoration-thickness: 2px;
+  text-decoration-color: var(--quill-tc-insertion);
+  text-underline-offset: 2px;
+  background-color: color-mix(
+    in srgb,
+    var(--quill-tc-insertion) 14%,
+    transparent
+  );
+}
+
+.ProseMirror .quill-tc--deletion {
+  text-decoration-line: line-through;
+  text-decoration-thickness: 2px;
+  text-decoration-color: var(--quill-tc-deletion);
+  background-color: color-mix(
+    in srgb,
+    var(--quill-tc-deletion) 12%,
+    transparent
+  );
+}
+
+/* Where goToNext()/goToPrevious() just landed. */
+.ProseMirror .quill-tc--active {
+  outline: 2px solid var(--color-accent, #4fa3e0);
+  outline-offset: 1px;
+}
+
+/* ── Hover affordance ─────────────────────────────────────────────────── */
+
+.quill-tc-popover {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border: 1px solid var(--color-page-border, #38383c);
+  border-radius: 6px;
+  background: var(--color-titlebar-bg, #1c1c1f);
+  box-shadow: 0 6px 20px var(--color-shadow, rgba(0, 0, 0, 0.55));
+  font-family: var(--font-chrome, system-ui, sans-serif);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--color-text, #e6e6e6);
+  white-space: nowrap;
+}
+
+.quill-tc-popover[hidden] {
+  display: none;
+}
+
+.quill-tc-popover__label {
+  padding: 0 4px 0 2px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.quill-tc-popover[data-author="human"] .quill-tc-popover__label {
+  color: var(--quill-tc-human);
+}
+
+.quill-tc-popover[data-author="ai"] .quill-tc-popover__label {
+  color: var(--quill-tc-ai);
+}
+
+.quill-tc-popover__button {
+  padding: 3px 8px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: var(--color-control-hover, rgba(255, 255, 255, 0.07));
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.quill-tc-popover__button:hover {
+  border-color: var(--color-page-border, #38383c);
+  background: var(--color-control-active, rgba(74, 160, 224, 0.2));
+}
+
+.quill-tc-popover__button:focus-visible {
+  outline: 2px solid var(--color-accent, #4fa3e0);
+  outline-offset: 1px;
+}
+
+.quill-tc-popover__button--accept {
+  color: var(--quill-tc-insertion);
+}
+
+.quill-tc-popover__button--reject {
+  color: var(--quill-tc-deletion);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ProseMirror .quill-tc {
+    transition: none;
+  }
+}
