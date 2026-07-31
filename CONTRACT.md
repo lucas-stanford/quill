@@ -45,9 +45,19 @@ interface RevisionBrief { markdown: string; comments: BriefComment[]; edits: Bri
 interface BriefComment  { quote: string; body: string; author: string; replies: string[]; orphaned: boolean }
 interface BriefEdit     { kind: "insertion" | "deletion"; text: string; context?: string }
 type RevisionStatus = "idle" | "queued" | "working" | "done" | "failed" | "cancelled";
+interface RevisionRequest { brief: RevisionBrief; prompt: string }
 interface RevisionState { id: string; status: RevisionStatus; markdown?: string; error?: string; mode: "attached" | "detached" }
 interface QueuedRevision { id: string; planPath: string; brief: RevisionBrief; createdAt: string }
 ```
+
+### The prompt crosses the wire, not the package boundary
+
+`POST /api/revision` carries **both** the structured `brief` and the rendered
+`prompt` string. The browser formats the prompt (payload lane owns
+`formatBriefPrompt`), so there is exactly one prompt implementation in the product.
+The CLI sends `prompt` verbatim to the model in detached mode and writes both into the
+queue file in attached mode — it never re-derives the prompt, and never imports across
+the package boundary to get it.
 
 ## The two agent modes
 

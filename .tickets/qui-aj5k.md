@@ -1,6 +1,6 @@
 ---
 id: qui-aj5k
-status: open
+status: in_progress
 deps: [qui-aadk, qui-ws0m]
 links: []
 created: 2026-07-31T20:41:59Z

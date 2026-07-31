@@ -75,11 +75,14 @@ export async function saveAnnotations(
 }
 
 /** Asks for a revision. Returns the id to poll. */
-export async function requestRevision(brief: RevisionBrief): Promise<RevisionState> {
+export async function requestRevision(
+  brief: RevisionBrief,
+  prompt: string,
+): Promise<RevisionState> {
   const res = await fetch("/api/revision", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ brief }),
+    body: JSON.stringify({ brief, prompt }),
   });
   if (!res.ok) throw new Error(await errorMessage(res, `Failed to request a revision (${res.status})`));
   return (await res.json()) as RevisionState;

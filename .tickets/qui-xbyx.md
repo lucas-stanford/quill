@@ -1,6 +1,6 @@
 ---
 id: qui-xbyx
-status: open
+status: in_progress
 deps: [qui-0ull]
 links: []
 created: 2026-07-31T18:51:14Z
@@ -27,3 +27,13 @@ Semantic word-level diff over the ProseMirror doc so a moved paragraph does not 
 
 A one-sentence AI change produces one tracked change, not a whole-document replacement. Rejecting every AI change restores the pre-revision plan exactly. A full revision cycle works in both attached and detached modes, and the reviewer always knows whether the AI is working, done or failed.
 
+
+## Notes
+
+**2026-07-31T22:35:04Z**
+
+M4 scaffold committed. Revision types frozen (RevisionBrief, BriefComment, BriefEdit, RevisionState, QueuedRevision), api.ts gained requestRevision/fetchRevision/cancelRevision, App wires useRevision and renders UpdateWithAI in the title bar.
+
+Three lanes: payload (buildBrief), bridge (packages/cli — attached queue file plus detached copilot -p), revision-ui (the button, in-flight state, and applying the result as tracked changes via the API tracking already exposes).
+
+Attached mode deliberately reuses the M2 file watcher: the parent agent rewrites PLAN.md on disk and the existing SSE stream pushes it back, so no new transport is needed.
