@@ -1,5 +1,6 @@
-import { useEditorState } from "@tiptap/react";
 import type { Editor } from "@tiptap/react";
+import { useRibbonState } from "./useRibbonState";
+import type { BlockType } from "./useRibbonState";
 import "./Ribbon.css";
 
 /** FROZEN PROP CONTRACT — the shape may not change; the implementation is yours. */
@@ -8,64 +9,14 @@ export interface RibbonProps {
   editor: Editor | null;
 }
 
-/* ── Active-state snapshot (re-computed on every transaction) ── */
-
-interface RibbonState {
-  blockType: BlockType;
-  isBold: boolean;
-  isItalic: boolean;
-  isCode: boolean;
-  isBulletList: boolean;
-  isOrderedList: boolean;
-  isBlockquote: boolean;
-  isCodeBlock: boolean;
-}
-
-type BlockType = "paragraph" | "heading1" | "heading2" | "heading3";
-
-const DEFAULT_STATE: RibbonState = {
-  blockType: "paragraph",
-  isBold: false,
-  isItalic: false,
-  isCode: false,
-  isBulletList: false,
-  isOrderedList: false,
-  isBlockquote: false,
-  isCodeBlock: false,
-};
-
-function computeState(editor: Editor | null): RibbonState {
-  if (!editor) return DEFAULT_STATE;
-
-  let blockType: BlockType = "paragraph";
-  if (editor.isActive("heading", { level: 1 })) blockType = "heading1";
-  else if (editor.isActive("heading", { level: 2 })) blockType = "heading2";
-  else if (editor.isActive("heading", { level: 3 })) blockType = "heading3";
-
-  return {
-    blockType,
-    isBold: editor.isActive("bold"),
-    isItalic: editor.isActive("italic"),
-    isCode: editor.isActive("code"),
-    isBulletList: editor.isActive("bulletList"),
-    isOrderedList: editor.isActive("orderedList"),
-    isBlockquote: editor.isActive("blockquote"),
-    isCodeBlock: editor.isActive("codeBlock"),
-  };
-}
-
 /* ── Ribbon ─────────────────────────────────────────────────── */
 
 export function Ribbon({ editor }: RibbonProps) {
   /*
-   * useEditorState subscribes to every ProseMirror transaction and
-   * re-renders this component whenever the selection or marks change.
-   * When editor is null the selector still runs; computeState handles that.
+   * Re-derived from the live editor on every transaction, and blank whenever
+   * the document has no caret to describe. See useRibbonState.
    */
-  const state = useEditorState({
-    editor,
-    selector: ({ editor: e }) => computeState(e),
-  }) ?? DEFAULT_STATE;
+  const { state, toolbarFocusProps } = useRibbonState(editor);
 
   const disabled = !editor;
 
@@ -88,7 +39,7 @@ export function Ribbon({ editor }: RibbonProps) {
   }
 
   return (
-    <div className="ribbon" role="toolbar" aria-label="Formatting">
+    <div className="ribbon" role="toolbar" aria-label="Formatting" {...toolbarFocusProps}>
       {/* ── Block style dropdown ───────────────────────────── */}
       <select
         className="ribbon-style-select"
@@ -201,6 +152,8 @@ function RibbonButton({ label, title, disabled, active, onClick, children }: Rib
       aria-pressed={active}
       title={title}
       disabled={disabled}
+      /* Keep the caret — and therefore the ribbon's reading of it — put. */
+      onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
     >
       {children}
