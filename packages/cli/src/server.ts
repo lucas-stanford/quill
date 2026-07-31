@@ -1,13 +1,15 @@
 import { createServer } from "node:http";
-import type { IncomingMessage, ServerResponse } from "node:http";
+import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import { readFile, rename, stat } from "node:fs/promises";
 import { watch } from "node:fs";
+import type { FSWatcher } from "node:fs";
 import { resolve, extname, basename, dirname } from "node:path";
 import type {
   AnnotationsResponse,
   ConflictResponse,
   ErrorResponse,
   PlanResponse,
+  RevisionState,
   SavePlanRequest,
   Sidecar,
 } from "./types.js";
@@ -23,6 +25,10 @@ import {
   sidecarPathFor,
   validateSaveAnnotationsRequest,
 } from "./sidecar.js";
+import { RevisionManager } from "./revision.js";
+import type { RevisionManagerOptions } from "./revision.js";
+import { validateAgentResponse, validateRevisionRequest } from "./revision-protocol.js";
+import type { RevisionMode } from "./revision-protocol.js";
 
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -44,12 +50,19 @@ interface AnnotationsConflictResponse extends ErrorResponse {
   current: AnnotationsResponse;
 }
 
+/** 409/500 for /api/revision — carries the state the browser should show. */
+interface RevisionErrorResponse extends ErrorResponse {
+  current: RevisionState;
+}
+
 type JsonBody =
   | PlanResponse
   | ErrorResponse
   | ConflictResponse
   | AnnotationsResponse
-  | AnnotationsConflictResponse;
+  | AnnotationsConflictResponse
+  | RevisionState
+  | RevisionErrorResponse;
 
 function sendJson(res: ServerResponse, status: number, body: JsonBody): void {
   const json = JSON.stringify(body);
@@ -76,6 +89,8 @@ interface LiveState {
    */
   lastWrittenHash: string | null;
   debounceTimer: NodeJS.Timeout | null;
+  /** Kept so shutdown can release it — one watcher per server, not per request. */
+  watcher: FSWatcher | null;
 }
 
 function createLiveState(): LiveState {
@@ -84,6 +99,7 @@ function createLiveState(): LiveState {
     lastBroadcastedHash: "",
     lastWrittenHash: null,
     debounceTimer: null,
+    watcher: null,
   };
 }
 
@@ -143,6 +159,7 @@ function startWatcher(planPath: string, state: LiveState): void {
 
   // Don't prevent clean exit when the event loop drains.
   watcher.unref();
+  state.watcher = watcher;
 }
 
 // ---------------------------------------------------------------------------
@@ -462,6 +479,95 @@ async function handleApiAnnotationsPut(
   sendJson(res, 200, body);
 }
 
+// ---------------------------------------------------------------------------
+// Revision (the agent bridge)
+// ---------------------------------------------------------------------------
+
+/**
+ * POST /api/revision — asks for a revision of the plan.
+ *
+ * Returns the state, never the finished text: in both modes the answer arrives
+ * later, by polling GET /api/revision. A second request while one is in flight
+ * is refused with 409 rather than raced — two agents rewriting one plan is a
+ * lost-update bug that no amount of conflict checking downstream can repair.
+ */
+async function handleApiRevisionPost(
+  revision: RevisionManager,
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> {
+  let rawBody: string;
+  try {
+    rawBody = await readBody(req);
+  } catch {
+    sendJson(res, 400, { error: "Request body too large" });
+    return;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawBody);
+  } catch {
+    sendJson(res, 400, { error: "Invalid JSON body" });
+    return;
+  }
+
+  const validated = validateRevisionRequest(parsed);
+  if (!validated.ok) {
+    sendJson(res, 400, { error: validated.reason });
+    return;
+  }
+
+  const started = await revision.start(validated.brief, validated.prompt);
+  if (!started.ok) {
+    sendJson(res, started.status, { error: started.error, current: started.current });
+    return;
+  }
+
+  sendJson(res, 200, started.state);
+}
+
+/**
+ * PUT /api/revision — the parent agent's completion signal, for an agent that
+ * would rather curl than write `.quill/revision-response.json`. Same payload as
+ * the file. See AGENT-BRIDGE.md.
+ */
+async function handleApiRevisionPut(
+  revision: RevisionManager,
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> {
+  let rawBody: string;
+  try {
+    rawBody = await readBody(req);
+  } catch {
+    sendJson(res, 400, { error: "Request body too large" });
+    return;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawBody);
+  } catch {
+    sendJson(res, 400, { error: "Invalid JSON body" });
+    return;
+  }
+
+  const validated = validateAgentResponse(parsed, "body");
+  if (!validated.ok) {
+    sendJson(res, 400, { error: validated.reason });
+    return;
+  }
+
+  const submitted = await revision.submitAgentResponse(validated.response);
+  if (!submitted.ok) {
+    sendJson(res, submitted.status, { error: submitted.error, current: submitted.current });
+    return;
+  }
+
+  sendJson(res, 200, submitted.state);
+}
+
 function handleApiLive(
   req: IncomingMessage,
   res: ServerResponse,
@@ -541,7 +647,12 @@ async function handleStatic(webRoot: string, pathname: string, res: ServerRespon
 // Request router
 // ---------------------------------------------------------------------------
 
-function createHandler(planPath: string, webRoot: string, state: LiveState) {
+function createHandler(
+  planPath: string,
+  webRoot: string,
+  state: LiveState,
+  revision: RevisionManager,
+) {
   const sidecarPath = sidecarPathFor(planPath);
 
   return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
@@ -591,6 +702,27 @@ function createHandler(planPath: string, webRoot: string, state: LiveState) {
       return;
     }
 
+    if (pathname === "/api/revision") {
+      if (method === "GET") {
+        sendJson(res, 200, revision.getState());
+      } else if (method === "POST") {
+        await handleApiRevisionPost(revision, req, res);
+      } else if (method === "PUT") {
+        await handleApiRevisionPut(revision, req, res);
+      } else if (method === "DELETE") {
+        await revision.cancel();
+        res.writeHead(204);
+        res.end();
+      } else {
+        res.writeHead(405, {
+          "Content-Type": "text/plain",
+          Allow: "GET, POST, PUT, DELETE",
+        });
+        res.end("Method Not Allowed");
+      }
+      return;
+    }
+
     if (pathname.startsWith("/api/")) {
       sendJson(res, 404, { error: "Not found" });
       return;
@@ -612,6 +744,51 @@ function createHandler(planPath: string, webRoot: string, state: LiveState) {
 
 export interface ServerHandle {
   port: number;
+  /** The revision bridge, exposed so tests and shutdown can reach it. */
+  revision: RevisionManager;
+  /** Graceful stop: closes the watcher, ends SSE clients, stops listening. */
+  close(): Promise<void>;
+  /** Signal-handler-safe stop: kills a running agent, clears the queue file. */
+  shutdownSync(): void;
+}
+
+export interface StartServerOptions {
+  /** Who services a revision request. See revision-protocol.ts. */
+  mode: RevisionMode;
+  /** Milliseconds before an unfinished revision fails. 0 disables. */
+  revisionTimeoutMs?: number;
+  /** Ports scanned upward from the preferred one on EADDRINUSE. */
+  maxAttempts?: number;
+  /** Test seams, forwarded to the revision manager. */
+  revisionOptions?: Pick<RevisionManagerOptions, "spawnFn" | "pollIntervalMs" | "logger">;
+}
+
+function closeServer(
+  server: Server,
+  state: LiveState,
+  revision: RevisionManager,
+): Promise<void> {
+  return new Promise((fulfill) => {
+    if (state.debounceTimer !== null) clearTimeout(state.debounceTimer);
+    state.debounceTimer = null;
+    state.watcher?.close();
+    state.watcher = null;
+    revision.shutdownSync();
+
+    // An open SSE response keeps the socket alive forever, so close() would
+    // never call back.
+    for (const client of state.sseClients) {
+      try {
+        client.end();
+      } catch {
+        /* already gone */
+      }
+    }
+    state.sseClients.clear();
+
+    server.close(() => fulfill());
+    server.closeAllConnections?.();
+  });
 }
 
 function bindServer(
@@ -619,8 +796,9 @@ function bindServer(
   webRoot: string,
   port: number,
   state: LiveState,
+  revision: RevisionManager,
 ): Promise<ServerHandle> {
-  const handler = createHandler(planPath, webRoot, state);
+  const handler = createHandler(planPath, webRoot, state, revision);
 
   return new Promise((fulfill, reject) => {
     const server = createServer((req, res) => {
@@ -634,7 +812,19 @@ function bindServer(
     });
 
     server.listen(port, "127.0.0.1", () => {
-      fulfill({ port });
+      // Report the port actually bound, so a caller may pass 0 and be told.
+      const address = server.address();
+      const boundPort = typeof address === "object" && address !== null ? address.port : port;
+      fulfill({
+        port: boundPort,
+        revision,
+        close: () => closeServer(server, state, revision),
+        shutdownSync: () => {
+          state.watcher?.close();
+          state.watcher = null;
+          revision.shutdownSync();
+        },
+      });
     });
 
     server.on("error", reject);
@@ -645,9 +835,18 @@ export async function startServer(
   planPath: string,
   webRoot: string,
   preferredPort: number,
-  maxAttempts = 20,
+  options: StartServerOptions,
 ): Promise<ServerHandle> {
   const state = createLiveState();
+  const maxAttempts = options.maxAttempts ?? 20;
+
+  const revision = new RevisionManager({
+    planPath,
+    mode: options.mode,
+    timeoutMs: options.revisionTimeoutMs,
+    ...options.revisionOptions,
+  });
+  await revision.sweepStaleRequest();
 
   // Seed lastBroadcastedHash from the current file so the first watcher event
   // after startup is only emitted if the content actually changed.
@@ -665,13 +864,14 @@ export async function startServer(
     if (port > 65535) break;
 
     try {
-      return await bindServer(planPath, webRoot, port, state);
+      return await bindServer(planPath, webRoot, port, state, revision);
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "EADDRINUSE") continue;
       throw err;
     }
   }
 
+  state.watcher?.close();
   throw new Error(
     `could not find a free port (tried ${maxAttempts} ports starting from ${preferredPort})`,
   );
