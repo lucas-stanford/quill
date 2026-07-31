@@ -4,8 +4,21 @@
  * Serializes a Tiptap JSONContent document tree back to Markdown.
  * DOM-free: walks the JSONContent tree, no ProseMirror Node objects required.
  *
- * Normalisations (stable after first pass):
- *   - Soft-wrap newlines inside paragraphs/list-items are removed (one long line).
+ * ── Formatting is preserved, not reinvented ─────────────────────────────────
+ *
+ * Markdown soft wraps are semantically invisible, so a tree walk alone cannot
+ * put them back and every save would reflow the entire file. When a `SourceMap`
+ * from `parseMarkdown()` is supplied, each block is first looked up by its
+ * canonical form; an untouched block is emitted as the exact bytes it was
+ * parsed from. Only blocks the user actually changed are rebuilt, and those are
+ * re-wrapped to the document's prevailing width so their diff stays local.
+ *
+ * Falling back to a rebuild is always safe. Emitting the wrong stored source is
+ * not, so every lookup is an exact match on canonical content or nothing.
+ *
+ * Normalisations applied to rebuilt blocks only:
+ *   - Prose is soft-wrapped to the detected width (never inside code spans,
+ *     links or escapes, and never so that a line opens a new block).
  *   - Bullet markers always use "-" regardless of the original "*" / "+".
  *   - Headings always use ATX style ("## Heading"), never setext.
  *   - Ordered-list indices use the node's `start` attribute.
@@ -14,10 +27,27 @@
  */
 
 import type { JSONContent } from "@tiptap/react";
+import type { SourceEntry, SourceMap, SourceSession } from "./source";
+import { wrapMarkdown } from "./wrap";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
 type MarkJSON = { type: string; attrs?: Record<string, unknown> };
+
+interface SerializeContext {
+  /** Column to wrap prose at; 0 disables wrapping (canonical form). */
+  wrap: number;
+  /** Verbatim source lookup for this pass, when one is available. */
+  session?: SourceSession;
+}
+
+/** Context used to compute canonical keys: no wrapping, no source reuse. */
+const CANONICAL: SerializeContext = { wrap: 0 };
+
+export interface SerializeOptions {
+  /** Formatting memory from `parseMarkdown()`; enables verbatim output. */
+  source?: SourceMap | null;
+}
 
 // ─── Escaping ───────────────────────────────────────────────────────────────
 
@@ -31,18 +61,61 @@ function escapeText(text: string): string {
 
 // ─── Inline serialisation ───────────────────────────────────────────────────
 
-export function serializeInline(nodes: JSONContent[] | undefined): string {
-  if (!nodes?.length) return "";
-  return nodes.map(serializeInlineNode).join("");
+function markSignature(marks: MarkJSON[]): string {
+  if (marks.length === 0) return "";
+  return JSON.stringify(
+    [...marks]
+      .sort((a, b) => (a.type < b.type ? -1 : a.type > b.type ? 1 : 0))
+      .map((m) => [m.type, m.attrs ?? null]),
+  );
 }
 
-function serializeInlineNode(node: JSONContent): string {
-  if (node.type === "hardBreak") return "  \n";
-  if (node.type !== "text") return "";
+/**
+ * Serialise inline content.
+ *
+ * Adjacent text nodes carrying identical marks are joined before the markup is
+ * applied. ProseMirror merges such nodes itself, so grouping keeps our output
+ * identical whether the tree came from our parser or from `getJSON()` — which
+ * is what makes canonical keys stable across a load. It also stops us emitting
+ * `**a****b**` for a run the parser happened to split in two.
+ */
+export function serializeInline(nodes: JSONContent[] | undefined): string {
+  if (!nodes?.length) return "";
 
-  const text = node.text ?? "";
-  const marks: MarkJSON[] = node.marks ?? [];
-  return applyMarks(text, marks);
+  let out = "";
+  let runText = "";
+  let runMarks: MarkJSON[] | null = null;
+  let runSignature = "";
+
+  const flush = () => {
+    if (runMarks !== null && runText !== "") out += applyMarks(runText, runMarks);
+    runText = "";
+    runMarks = null;
+    runSignature = "";
+  };
+
+  for (const node of nodes) {
+    if (node.type === "hardBreak") {
+      flush();
+      out += "  \n";
+      continue;
+    }
+    if (node.type !== "text") continue;
+
+    const marks: MarkJSON[] = node.marks ?? [];
+    const signature = markSignature(marks);
+    if (runMarks !== null && signature === runSignature) {
+      runText += node.text ?? "";
+    } else {
+      flush();
+      runMarks = marks;
+      runSignature = signature;
+      runText = node.text ?? "";
+    }
+  }
+  flush();
+
+  return out;
 }
 
 function applyMarks(text: string, marks: MarkJSON[]): string {
@@ -56,7 +129,14 @@ function applyMarks(text: string, marks: MarkJSON[]): string {
     return `${delim}${pad}${text}${pad}${delim}`;
   }
 
-  let result = escapeText(text);
+  // Emphasis delimiters have to hug their text: `** bold **` is not emphasis at
+  // all, so any surrounding whitespace is pushed outside the markers.
+  const leading = /^\s*/.exec(text)?.[0] ?? "";
+  const trailing = /\s*$/.exec(text)?.[0] ?? "";
+  const core = text.slice(leading.length, text.length - trailing.length);
+  if (core === "") return text;
+
+  let result = escapeText(core);
 
   const hasBold = marks.some((m) => m.type === "bold");
   const hasItalic = marks.some((m) => m.type === "italic");
@@ -84,28 +164,62 @@ function applyMarks(text: string, marks: MarkJSON[]): string {
     result = `[${result}](${href}${title})`;
   }
 
-  return result;
+  return `${leading}${result}${trailing}`;
+}
+
+// ─── Canonical keys ─────────────────────────────────────────────────────────
+
+/**
+ * The canonical (normalised, unwrapped) markdown for a top-level block.
+ *
+ * This doubles as the `SourceMap` key. Because it describes the block's meaning
+ * rather than its JSON shape, it comes out identical whether computed from our
+ * parser's output or from ProseMirror's `getJSON()`, and two blocks share a key
+ * only when they are semantically the same block.
+ */
+export function canonicalKey(node: JSONContent): string {
+  return serializeNode(node, "", CANONICAL);
+}
+
+/** Canonical form of a list item, deliberately excluding its bullet marker. */
+export function canonicalItemKey(item: JSONContent): string {
+  return (item.content ?? [])
+    .map((child) => serializeNode(child, "", CANONICAL))
+    .join("");
 }
 
 // ─── Block serialisation ────────────────────────────────────────────────────
 
 /**
- * Serialise a single block node.
+ * Serialise a single block node in canonical form.
  * `depth` is non-zero only inside list items (controls bullet indentation).
  */
 export function serializeBlock(node: JSONContent, depth = 0): string {
+  return serializeNode(node, "  ".repeat(depth), CANONICAL);
+}
+
+/** `indent` is the literal whitespace every line of this block sits behind. */
+function serializeNode(
+  node: JSONContent,
+  indent: string,
+  ctx: SerializeContext,
+): string {
   const children = node.content ?? [];
+  const width = ctx.wrap;
 
   switch (node.type) {
     case "heading": {
       const level = Math.min((node.attrs?.level as number) ?? 1, 6);
       const hashes = "#".repeat(level);
-      return `${hashes} ${serializeInline(children)}\n\n`;
+      // Headings stay on one line — a wrapped heading would turn its own tail
+      // into a separate paragraph.
+      return `${indent}${hashes} ${serializeInline(children)}\n\n`;
     }
 
     case "paragraph": {
       const text = serializeInline(children);
-      return text ? `${text}\n\n` : "";
+      if (!text) return "";
+      return `${wrapMarkdown(text, width, indent, indent)}\n\n`;
     }
 
     case "codeBlock": {
@@ -113,38 +227,43 @@ export function serializeBlock(node: JSONContent, depth = 0): string {
       const raw = children.map((n) => n.text ?? "").join("");
       // marked always appends \n when serialising to HTML; strip one trailing \n
       // so the round-trip is stable (our fenced block already supplies the \n
-      // before the closing fence).
+      // before the closing fence). The body is emitted untouched: no wrapping,
+      // no escaping — every space in an ASCII diagram is load-bearing.
       const code = raw.replace(/\n$/, "");
-      return `\`\`\`${lang}\n${code}\n\`\`\`\n\n`;
+      const body = indent ? indentLines(code, indent) : code;
+      return `${indent}\`\`\`${lang}\n${body}\n${indent}\`\`\`\n\n`;
     }
 
     case "blockquote": {
-      const inner = children.map((n) => serializeBlock(n)).join("");
-      const trimmed = inner.trimEnd();
-      const prefixed = trimmed
+      const quoteWidth = width > 2 ? width - indent.length - 2 : width;
+      const inner = children
+        .map((n) => serializeNode(n, "", { ...ctx, wrap: quoteWidth }))
+        .join("");
+      const prefixed = inner
+        .trimEnd()
         .split("\n")
-        .map((l) => (l ? `> ${l}` : ">"))
+        .map((l) => (l ? `${indent}> ${l}` : `${indent}>`))
         .join("\n");
       return `${prefixed}\n\n`;
     }
 
     case "horizontalRule":
-      return `---\n\n`;
+      return `${indent}---\n\n`;
 
     case "bulletList": {
       const items = children
-        .map((item) => serializeListItem(item, "-", depth))
+        .map((item) => serializeListItem(item, "-", indent, ctx))
         .join("");
       // Top-level list: add a blank line after; nested: no extra newline
-      return depth === 0 ? `${items}\n` : items;
+      return indent === "" ? `${items}\n` : items;
     }
 
     case "orderedList": {
       const start = (node.attrs?.start as number) ?? 1;
       const items = children
-        .map((item, i) => serializeListItem(item, `${start + i}.`, depth))
+        .map((item, i) => serializeListItem(item, `${start + i}.`, indent, ctx))
         .join("");
-      return depth === 0 ? `${items}\n` : items;
+      return indent === "" ? `${items}\n` : items;
     }
 
     default:
@@ -152,13 +271,29 @@ export function serializeBlock(node: JSONContent, depth = 0): string {
   }
 }
 
+function indentLines(text: string, indent: string): string {
+  return text
+    .split("\n")
+    .map((l) => (l ? indent + l : l))
+    .join("\n");
+}
+
 function serializeListItem(
   item: JSONContent,
   marker: string,
-  depth: number,
+  indent: string,
+  ctx: SerializeContext,
 ): string {
+  const bullet = `${marker} `;
+  // Continuation lines align with the item's text. That alignment is what makes
+  // nested content belong to this item instead of interrupting the list, so it
+  // follows the marker width rather than a fixed two spaces.
+  const contIndent = indent + " ".repeat(bullet.length);
+
+  const verbatim = reuseListItem(item, bullet, indent, ctx);
+  if (verbatim !== null) return verbatim;
+
   const children = item.content ?? [];
-  const indent = "  ".repeat(depth);
   let result = "";
   let firstParagraph = true;
 
@@ -166,21 +301,47 @@ function serializeListItem(
     if (child.type === "paragraph") {
       const text = serializeInline(child.content);
       if (firstParagraph) {
-        result += `${indent}${marker} ${text}\n`;
+        result += `${wrapMarkdown(text, ctx.wrap, indent + bullet, contIndent)}\n`;
         firstParagraph = false;
       } else {
         // Continuation paragraph inside the same list item
-        result += `\n${indent}  ${text}\n`;
+        result += `\n${wrapMarkdown(text, ctx.wrap, contIndent, contIndent)}\n`;
       }
     } else if (child.type === "bulletList" || child.type === "orderedList") {
-      // Nested list — indent one more level
-      result += serializeBlock(child, depth + 1);
+      result += serializeNode(child, contIndent, ctx);
+    } else {
+      const block = serializeNode(child, contIndent, ctx).trimEnd();
+      if (block) result += `\n${block}\n`;
     }
-    // Other block types inside list items (blockquote, code) are rare;
-    // fall through to serializeBlock if needed.
   }
 
+  if (firstParagraph) result += `${indent}${marker}\n`;
+
   return result;
+}
+
+/**
+ * Emit a list item straight from its original source, or `null` to rebuild it.
+ *
+ * marked reports nested item source dedented to column 0, so stored text is
+ * re-indented to the item's current depth. The bullet is checked against the
+ * marker we are about to emit: if the item moved — a different depth, or a
+ * different number after a reorder — the stored text no longer describes it and
+ * we rebuild instead. Re-emitting a stale ordered-list number would change what
+ * the document means, which is the one outcome worth being paranoid about.
+ */
+function reuseListItem(
+  item: JSONContent,
+  bullet: string,
+  indent: string,
+  ctx: SerializeContext,
+): string | null {
+  if (!ctx.session) return null;
+  const entry = ctx.session.takeItem(canonicalItemKey(item));
+  if (!entry || !entry.raw.startsWith(bullet)) return null;
+
+  const body = indent ? indentLines(entry.raw, indent) : entry.raw;
+  return body + (entry.sep.includes("\n") ? entry.sep : "\n");
 }
 
 // ─── Public API ─────────────────────────────────────────────────────────────
@@ -188,21 +349,57 @@ function serializeListItem(
 /**
  * Serialise a Tiptap JSONContent document tree to a Markdown string.
  *
- * The output is the canonical ("normalised") form:
- *   - No setext headings; no triple+ blank lines.
- *   - Trailing empty paragraphs (from TrailingNode) are silently dropped.
- *   - The result ends with exactly one newline.
+ * Pass the `SourceMap` produced by `parseMarkdown()` to keep every untouched
+ * block byte-identical to the file it was loaded from. Without it the output is
+ * the canonical form: correct, but reflowed.
  */
-export function docToMarkdown(doc: JSONContent): string {
+export function docToMarkdown(
+  doc: JSONContent,
+  options: SerializeOptions = {},
+): string {
   if (doc.type !== "doc") return "";
 
-  const parts = (doc.content ?? []).map((node) => serializeBlock(node));
-  let result = parts.join("");
+  const source = options.source ?? null;
+  const session = source ? source.session() : undefined;
+  const ctx: SerializeContext = {
+    wrap: source ? source.wrapWidth : 0,
+    session,
+  };
 
-  // Collapse any accidental triple+ newlines
-  result = result.replace(/\n{3,}/g, "\n\n");
-  // Strip trailing whitespace and ensure exactly one trailing newline
-  result = result.trimEnd() + "\n";
+  const parts: string[] = [];
+  let previous: SourceEntry | null = null;
 
-  return result;
+  for (const node of doc.content ?? []) {
+    const entry = session ? session.takeBlock(canonicalKey(node)) : undefined;
+    const block = entry
+      ? entry.raw
+      : serializeNode(node, "", ctx).replace(/\n+$/, "");
+    if (!block.trim()) continue;
+
+    if (parts.length > 0) parts.push(separatorAfter(previous, entry));
+    parts.push(block);
+    previous = entry ?? null;
+  }
+
+  // Separators are assembled explicitly above rather than normalised by regex,
+  // so blank lines inside a fenced code block survive untouched.
+  return parts.join("").trimEnd() + "\n";
+}
+
+/**
+ * Whitespace between two emitted blocks.
+ *
+ * The recorded separator is only replayed when the two blocks are still
+ * neighbours in the order they were parsed in. Otherwise it describes a gap
+ * that no longer exists — a document's final block records the bare newline at
+ * end of file, and replaying that mid-document would let the next block lazily
+ * continue the previous paragraph. A blank line is the safe universal answer.
+ */
+function separatorAfter(
+  previous: SourceEntry | null,
+  current: SourceEntry | undefined,
+): string {
+  if (!previous || !current) return "\n\n";
+  const contiguous = current.seq === previous.seq + 1;
+  return contiguous && previous.sep.includes("\n") ? previous.sep : "\n\n";
 }

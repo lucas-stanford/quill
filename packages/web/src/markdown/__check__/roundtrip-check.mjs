@@ -1,349 +1,143 @@
 /**
  * roundtrip-check.mjs
  *
- * Verifies Markdown round-trip fidelity for PLAN.md.
+ * Proves the property M2 is named after: editing a plan in the browser must not
+ * reflow the parts of the file nobody touched.
  *
- * This script is a CHECKED-IN verification tool — it proves the serializer
- * produces idempotent output and documents exactly which constructs normalise.
+ * Usage (from anywhere in the repo):
+ *   node packages/web/src/markdown/__check__/roundtrip-check.mjs [file.md]
  *
- * Usage (from repo root):
- *   node packages/web/src/markdown/__check__/roundtrip-check.mjs
+ * Exit code 0 = every assertion held. 1 = drift.
  *
- * Exit code 0 = idempotent (second round-trip identical to first).
- * Exit code 1 = not idempotent or parse error.
+ * What it asserts, against the repository's own PLAN.md:
+ *   1. Load and save with no edit is byte-identical — a zero-line diff.
+ *   2. The round trip is idempotent, with and without the source map.
+ *   3. A one-character edit in ANY top-level block changes only that block.
+ *   4. Whatever comes out re-parses to the same document that went in, for the
+ *      awkward cases: reordering, deletion, duplication, ordered-list renumber.
+ *   5. The ASCII diagram inside the fenced code block survives byte-identically.
  */
 
 import { readFileSync } from "fs";
-import { createRequire } from "module";
-import { fileURLToPath } from "url";
+import { resolve } from "path";
 import { diffLines } from "./diff.mjs";
+import { loadMarkdownModule, repoRoot } from "./load.mjs";
 
-const require = createRequire(import.meta.url);
+const { parseMarkdown, docToMarkdown } = await loadMarkdownModule();
 
-// ── Locate packages ──────────────────────────────────────────────────────────
-
-// Walk up to repo root (roundtrip-check.mjs is 5 levels deep in the tree)
-import { resolve, dirname } from "path";
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const pkgRoot = resolve(__dirname, "../../../../..");   // /…/roundtrip
-
-// We need to load marked from the package tree
-const markedMod = resolve(pkgRoot, "node_modules/.pnpm/marked@18.0.7/node_modules/marked/lib/marked.esm.js");
-
-const { marked } = await import(markedMod);
-
-// ── Inline the serialiser/parser logic ──────────────────────────────────────
-// The TypeScript source can't be imported directly in Node (no transpiler).
-// We inline equivalent plain-JS implementations here — kept in sync with the
-// .ts sources by hand.  If they diverge, update this script to match.
-
-// ── parse (markdown → JSONContent) ──────────────────────────────────────────
-
-function parseInline(tokens, inheritedMarks = []) {
-  const result = [];
-  for (const token of tokens) {
-    switch (token.type) {
-      case "text": {
-        if (token.tokens && token.tokens.length > 0) {
-          result.push(...parseInline(token.tokens, inheritedMarks));
-        } else {
-          const text = token.text.replace(/\n/g, " ");
-          if (text) {
-            const node = { type: "text", text };
-            if (inheritedMarks.length > 0) node.marks = inheritedMarks;
-            result.push(node);
-          }
-        }
-        break;
-      }
-      case "escape": {
-        const text = token.text;
-        if (text) {
-          const node = { type: "text", text };
-          if (inheritedMarks.length > 0) node.marks = inheritedMarks;
-          result.push(node);
-        }
-        break;
-      }
-      case "strong":
-        result.push(...parseInline(token.tokens ?? [], [...inheritedMarks, { type: "bold" }]));
-        break;
-      case "em":
-        result.push(...parseInline(token.tokens ?? [], [...inheritedMarks, { type: "italic" }]));
-        break;
-      case "del":
-        result.push(...parseInline(token.tokens ?? [], [...inheritedMarks, { type: "strike" }]));
-        break;
-      case "codespan": {
-        if (token.text) {
-          result.push({ type: "text", text: token.text, marks: [...inheritedMarks, { type: "code" }] });
-        }
-        break;
-      }
-      case "link": {
-        const linkMark = { type: "link", attrs: { href: token.href, title: token.title ?? null } };
-        result.push(...parseInline(token.tokens ?? [], [...inheritedMarks, linkMark]));
-        break;
-      }
-      case "br":
-        result.push({ type: "hardBreak" });
-        break;
-    }
-  }
-  return result;
-}
-
-function parseListItem(item) {
-  const content = [];
-  const tokens = item.tokens ?? [];
-  for (const token of tokens) {
-    switch (token.type) {
-      case "text": {
-        const inlineToks = token.tokens ?? [];
-        if (inlineToks.length > 0) {
-          content.push({ type: "paragraph", content: parseInline(inlineToks) });
-        } else {
-          const text = token.text.replace(/\n/g, " ");
-          if (text) content.push({ type: "paragraph", content: [{ type: "text", text }] });
-        }
-        break;
-      }
-      case "paragraph":
-        content.push({ type: "paragraph", content: parseInline(token.tokens ?? []) });
-        break;
-      case "list":
-      case "blockquote":
-      case "code":
-      case "hr":
-        content.push(...parseBlock(token));
-        break;
-    }
-  }
-  if (content.length === 0 || content[0].type !== "paragraph") {
-    content.unshift({ type: "paragraph", content: [] });
-  }
-  return { type: "listItem", content };
-}
-
-function parseBlock(token) {
-  switch (token.type) {
-    case "heading":
-      return [{ type: "heading", attrs: { level: token.depth }, content: parseInline(token.tokens ?? []) }];
-    case "paragraph":
-      return [{ type: "paragraph", content: parseInline(token.tokens ?? []) }];
-    case "code": {
-      const lang = token.lang || null;
-      const text = token.text;
-      return [{ type: "codeBlock", attrs: { language: lang }, content: text ? [{ type: "text", text }] : [] }];
-    }
-    case "blockquote": {
-      const innerContent = [];
-      for (const t of token.tokens ?? []) innerContent.push(...parseBlock(t));
-      return [{ type: "blockquote", content: innerContent }];
-    }
-    case "hr":
-      return [{ type: "horizontalRule" }];
-    case "list": {
-      const isOrdered = token.ordered;
-      const start = typeof token.start === "number" ? token.start : 1;
-      const items = token.items.map(parseListItem);
-      return [{ type: isOrdered ? "orderedList" : "bulletList", attrs: isOrdered ? { start } : {}, content: items }];
-    }
-    case "space":
-    default:
-      return [];
-  }
-}
-
-function markdownToJSON(markdown) {
-  const tokens = marked.lexer(markdown, { gfm: true, breaks: false });
-  const content = [];
-  for (const token of tokens) content.push(...parseBlock(token));
-  if (content.length === 0) content.push({ type: "paragraph", content: [] });
-  return { type: "doc", content };
-}
-
-// ── serialize (JSONContent → markdown) ─────────────────────────────────────
-
-const ESCAPE_REGEX = /([\\`*_[\]~])/g;
-function escapeText(text) { return text.replace(ESCAPE_REGEX, "\\$1"); }
-
-function serializeInline(nodes) {
-  if (!nodes?.length) return "";
-  return nodes.map(n => {
-    if (n.type === "hardBreak") return "  \n";
-    if (n.type !== "text") return "";
-    const text = n.text ?? "";
-    const marks = n.marks ?? [];
-    return applyMarks(text, marks);
-  }).join("");
-}
-
-function applyMarks(text, marks) {
-  if (marks.some(m => m.type === "code")) {
-    const delim = text.includes("`") ? "``" : "`";
-    const pad = (text.startsWith("`") || text.endsWith("`")) ? " " : "";
-    return `${delim}${pad}${text}${pad}${delim}`;
-  }
-  let result = escapeText(text);
-  const hasBold = marks.some(m => m.type === "bold");
-  const hasItalic = marks.some(m => m.type === "italic");
-  const hasStrike = marks.some(m => m.type === "strike");
-  const linkMark = marks.find(m => m.type === "link");
-
-  if (hasStrike) result = `~~${result}~~`;
-  if (hasBold && hasItalic) result = `***${result}***`;
-  else if (hasBold) result = `**${result}**`;
-  else if (hasItalic) result = `*${result}*`;
-  if (marks.some(m => m.type === "underline")) result = `<u>${result}</u>`;
-  if (linkMark) {
-    const href = linkMark.attrs?.href ?? "";
-    const title = linkMark.attrs?.title ? ` "${linkMark.attrs.title}"` : "";
-    result = `[${result}](${href}${title})`;
-  }
-  return result;
-}
-
-function serializeBlock(node, depth = 0) {
-  const children = node.content ?? [];
-  switch (node.type) {
-    case "heading": {
-      const level = Math.min(node.attrs?.level ?? 1, 6);
-      return `${"#".repeat(level)} ${serializeInline(children)}\n\n`;
-    }
-    case "paragraph": {
-      const text = serializeInline(children);
-      return text ? `${text}\n\n` : "";
-    }
-    case "codeBlock": {
-      const lang = node.attrs?.language ?? "";
-      const raw = children.map(n => n.text ?? "").join("");
-      const code = raw.replace(/\n$/, "");
-      return `\`\`\`${lang}\n${code}\n\`\`\`\n\n`;
-    }
-    case "blockquote": {
-      const inner = children.map(n => serializeBlock(n)).join("");
-      const trimmed = inner.trimEnd();
-      const prefixed = trimmed.split("\n").map(l => l ? `> ${l}` : ">").join("\n");
-      return `${prefixed}\n\n`;
-    }
-    case "horizontalRule":
-      return `---\n\n`;
-    case "bulletList": {
-      const items = children.map(item => serializeListItem(item, "-", depth)).join("");
-      return depth === 0 ? `${items}\n` : items;
-    }
-    case "orderedList": {
-      const start = node.attrs?.start ?? 1;
-      const items = children.map((item, i) => serializeListItem(item, `${start + i}.`, depth)).join("");
-      return depth === 0 ? `${items}\n` : items;
-    }
-    default: return "";
-  }
-}
-
-function serializeListItem(item, marker, depth) {
-  const children = item.content ?? [];
-  const indent = "  ".repeat(depth);
-  let result = "";
-  let firstParagraph = true;
-  for (const child of children) {
-    if (child.type === "paragraph") {
-      const text = serializeInline(child.content);
-      if (firstParagraph) {
-        result += `${indent}${marker} ${text}\n`;
-        firstParagraph = false;
-      } else {
-        result += `\n${indent}  ${text}\n`;
-      }
-    } else if (child.type === "bulletList" || child.type === "orderedList") {
-      result += serializeBlock(child, depth + 1);
-    }
-  }
-  return result;
-}
-
-function docToMarkdown(doc) {
-  if (doc.type !== "doc") return "";
-  const parts = (doc.content ?? []).map(node => serializeBlock(node));
-  let result = parts.join("").replace(/\n{3,}/g, "\n\n").trimEnd() + "\n";
-  return result;
-}
-
-// ── Main ─────────────────────────────────────────────────────────────────────
-
-const planPath = resolve(pkgRoot, "PLAN.md");
+const planPath = resolve(repoRoot, process.argv[2] ?? "PLAN.md");
 const original = readFileSync(planPath, "utf-8");
+
+let failures = 0;
+const clone = (value) => JSON.parse(JSON.stringify(value));
+
+function assert(label, ok, detail = "") {
+  console.log(`  ${ok ? "✓" : "✗"} ${label}${detail ? ` — ${detail}` : ""}`);
+  if (!ok) failures++;
+}
+
+function firstTextNode(node) {
+  if (node.type === "text") return node;
+  for (const child of node.content ?? []) {
+    const found = firstTextNode(child);
+    if (found) return found;
+  }
+  return null;
+}
+
+/** The output must always mean exactly what the tree it came from meant. */
+function meansTheSame(doc, emitted) {
+  return docToMarkdown(doc) === docToMarkdown(parseMarkdown(emitted).doc);
+}
 
 console.log("=== Quill round-trip check ===\n");
 console.log(`Source: ${planPath}`);
-console.log(`Length: ${original.length} bytes, ${original.split("\n").length} lines\n`);
+console.log(
+  `Length: ${original.length} bytes, ${original.split("\n").length} lines`,
+);
 
-// First round-trip
-const json1 = markdownToJSON(original);
-const pass1 = docToMarkdown(json1);
+const plan = parseMarkdown(original);
+console.log(`Detected wrap width: ${plan.source.wrapWidth}\n`);
 
-// Second round-trip (must be identical to pass1 — idempotence)
-const json2 = markdownToJSON(pass1);
-const pass2 = docToMarkdown(json2);
+// ── 1. Load and save, untouched ─────────────────────────────────────────────
+console.log("── Untouched round trip ──────────────────────────────────────────────────");
+const saved = docToMarkdown(plan.doc, { source: plan.source });
+const untouched = diffLines(original, saved);
+assert("byte-identical, zero-line diff", saved === original, `${untouched.total} changed lines`);
+if (saved !== original) console.log(untouched.hunks.slice(0, 40).join("\n"));
 
-// ── Diff pass1 vs original ────────────────────────────────────────────────────
-console.log("── Pass 1: original → parse → serialize ─────────────────────────────────");
-const diff1 = diffLines(original, pass1);
-if (diff1.length === 0) {
-  console.log("✓ Byte-identical to original (no normalization needed)\n");
-} else {
-  console.log(`${diff1.length} line(s) changed (normalization — expected):`);
-  diff1.forEach(({ lineNo, original: orig, result }) => {
-    const origTrunc = orig.length > 100 ? orig.slice(0, 97) + "…" : orig;
-    const resTrunc = result.length > 100 ? result.slice(0, 97) + "…" : result;
-    console.log(`  Line ~${lineNo}:`);
-    console.log(`    - ${JSON.stringify(origTrunc)}`);
-    console.log(`    + ${JSON.stringify(resTrunc)}`);
-  });
-  console.log();
-}
+// ── 2. Idempotence ──────────────────────────────────────────────────────────
+console.log("\n── Idempotence ───────────────────────────────────────────────────────────");
+const second = parseMarkdown(saved);
+assert("second pass identical", docToMarkdown(second.doc, { source: second.source }) === saved);
+const canonical = docToMarkdown(plan.doc);
+const canonicalAgain = docToMarkdown(parseMarkdown(canonical).doc);
+assert("canonical (no source map) pass identical", canonicalAgain === canonical);
 
-// ── Diff pass2 vs pass1 ──────────────────────────────────────────────────────
-console.log("── Pass 2: serialized → parse → serialize (idempotence check) ───────────");
-const diff2 = diffLines(pass1, pass2);
-if (diff2.length === 0) {
-  console.log("✓ Idempotent — second round-trip is byte-identical to first\n");
-} else {
-  console.error("✗ NOT idempotent — second pass differs from first:");
-  diff2.forEach(({ lineNo, original: orig, result }) => {
-    console.error(`  Line ~${lineNo}:`);
-    console.error(`    - ${JSON.stringify(orig)}`);
-    console.error(`    + ${JSON.stringify(result)}`);
-  });
-  console.log();
-}
-
-// ── ASCII diagram spot-check ─────────────────────────────────────────────────
-console.log("── ASCII diagram preservation ────────────────────────────────────────────");
-const diagramLines = [
-  "  ┌─────────────────────────┐        ┌──────────────────────┐",
-  "  │  quill  (node CLI)      │        │  PLAN.md             │  ← source of truth",
-  "  └───────────┬─────────────┘",
-];
-let diagramOk = true;
-for (const line of diagramLines) {
-  if (pass1.includes(line)) {
-    console.log(`  ✓ ${line.trim().slice(0, 60)}`);
-  } else {
-    console.error(`  ✗ MISSING: ${line}`);
-    diagramOk = false;
+// ── 3. One character in, one block out ──────────────────────────────────────
+console.log("\n── One-character edit, per block ─────────────────────────────────────────");
+let worst = 0;
+let worstIndex = -1;
+for (let i = 0; i < plan.doc.content.length; i++) {
+  const doc = clone(plan.doc);
+  const text = firstTextNode(doc.content[i]);
+  if (!text) continue;
+  text.text += "X";
+  const edited = docToMarkdown(doc, { source: plan.source });
+  const diff = diffLines(original, edited);
+  if (diff.total > worst) {
+    worst = diff.total;
+    worstIndex = i;
+  }
+  if (!meansTheSame(doc, edited)) {
+    assert(`block ${i} (${doc.content[i].type}) round-trips`, false);
   }
 }
+assert(
+  `worst case ${worst} changed lines (block ${worstIndex}, ${plan.doc.content[worstIndex]?.type})`,
+  worst <= 6,
+);
 
-// ── Code block language tags ─────────────────────────────────────────────────
-console.log("\n── Code block language tags ──────────────────────────────────────────────");
-const hasJsonFence = pass1.includes("```json\n");
-const hasNoLangFence = (pass1.match(/^```\n/m) !== null);
-console.log(`  ${hasJsonFence ? "✓" : "✗"} \`\`\`json block preserved`);
-console.log(`  ${hasNoLangFence ? "✓" : "✗"} language-less \`\`\` block preserved`);
+// ── 4. Blocks that move ─────────────────────────────────────────────────────
+console.log("\n── Reorder, delete, duplicate ────────────────────────────────────────────");
+const scenarios = [
+  ["reversed document", (d) => d.content.reverse()],
+  ["first block deleted", (d) => d.content.splice(0, 1)],
+  ["a block duplicated", (d) => d.content.push(clone(d.content[2]))],
+  [
+    "ordered list reordered",
+    (d) => {
+      const list = d.content.find((n) => n.type === "orderedList");
+      list.content.reverse();
+    },
+  ],
+];
+for (const [label, mutate] of scenarios) {
+  const doc = clone(plan.doc);
+  mutate(doc);
+  const emitted = docToMarkdown(doc, { source: plan.source });
+  assert(label, meansTheSame(doc, emitted));
+}
 
-// ── Exit ─────────────────────────────────────────────────────────────────────
-const ok = diff2.length === 0 && diagramOk && hasJsonFence && hasNoLangFence;
-console.log(`\n${ok ? "✓ PASS" : "✗ FAIL"}`);
-process.exit(ok ? 0 : 1);
+// ── 5. Whitespace-significant content ───────────────────────────────────────
+console.log("\n── Whitespace-significant content ────────────────────────────────────────");
+const diagramStart = original.indexOf("  copilot / any agent");
+const diagramEnd = original.indexOf("  └─────────────────────────┘");
+const diagram =
+  diagramStart === -1
+    ? null
+    : original.slice(diagramStart, diagramEnd + "  └─────────────────────────┘".length);
+
+if (diagram) {
+  const doc = clone(plan.doc);
+  firstTextNode(doc.content[2]).text += "X";
+  const emitted = docToMarkdown(doc, { source: plan.source });
+  assert("ASCII diagram byte-identical after an edit elsewhere", emitted.includes(diagram));
+} else {
+  console.log("  – no ASCII diagram in this document, skipped");
+}
+assert("```json fence preserved", saved.includes("```json\n"));
+assert("language-less ``` fence preserved", /^```\n/m.test(saved));
+
+console.log(`\n${failures === 0 ? "✓ PASS" : `✗ FAIL (${failures})`}`);
+process.exit(failures === 0 ? 0 : 1);
