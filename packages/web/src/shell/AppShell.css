@@ -6,6 +6,8 @@
   height: 100%;
   font-family: var(--font-chrome);
   color: var(--color-text);
+  /* Containing block for the ribbon overlay. */
+  position: relative;
 }
 
 /* ── Title bar ──────────────────────────────────────────────── */
@@ -20,9 +22,9 @@
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   padding-inline: 16px;
-  /* Float above the page shadow */
+  /* Float above the page shadow, and above the ribbon that slides in behind it */
   position: relative;
-  z-index: 1;
+  z-index: 3;
 }
 
 .titlebar-brand {
@@ -99,6 +101,15 @@
   100%     { opacity: 0; }
 }
 
+/* Decorative motion only — the "Saved" fade is meaning, not decoration,
+   so it survives here. */
+@media (prefers-reduced-motion: reduce) {
+  .status-badge--loading,
+  .skeleton-bone::after {
+    animation: none;
+  }
+}
+
 /* ── Theme toggle ────────────────────────────────────────────── */
 
 .theme-toggle {
@@ -131,6 +142,62 @@
   background: var(--color-control-active);
 }
 
+/* ── Ribbon slot — the slide ────────────────────────────────
+ *
+ * OVERLAY, not a reserved row. The ribbon is an opaque bar pinned under the
+ * title bar and painted over the canvas; the canvas itself always spans the
+ * full height below the title bar, so its box, the page's box and the scroll
+ * offset are byte-identical in both modes and nothing can move when the
+ * ribbon comes and goes.
+ *
+ * The alternative — leaving a 38 px hole in the layout in review mode — keeps
+ * the geometry just as constant but costs a permanent empty band of chrome,
+ * which no word processor has: Word's toolbars are an opaque layer and the
+ * document runs underneath them. Here the document merely gets its top gutter
+ * back when the ribbon leaves, and scrolls under the bar when it is out — same
+ * as every pinned toolbar. .page-canvas-inner keeps the ribbon's height in its
+ * top padding at all times so the top of the page is never covered at rest.
+ *
+ * Only `transform` is animated: it is compositor-driven and cannot reflow.
+ * Never animate height/display/margin here — that is what jumps the page.
+ */
+.ribbon-slot {
+  position: absolute;
+  top: var(--titlebar-height);
+  left: 0;
+  right: 0;
+  /* Above the canvas, below the title bar it hides behind. */
+  z-index: 2;
+  transform: translateY(0);
+  transition:
+    transform var(--ribbon-slide-duration) var(--ribbon-slide-ease),
+    visibility 0s linear 0s;
+  will-change: transform;
+}
+
+.ribbon-slot[data-hidden] {
+  /* -100 % clears the bar exactly; the extra 8 px takes its shadow with it. */
+  transform: translateY(calc(-100% - 8px));
+  /*
+   * Applied only once the slide has finished, so the ribbon is un-hittable and
+   * un-focusable while parked. Until then `inert` (set in AppShell) holds the
+   * line — visibility cannot be delayed for the show direction without the
+   * ribbon animating in invisibly.
+   */
+  visibility: hidden;
+  transition:
+    transform var(--ribbon-slide-duration) var(--ribbon-slide-ease),
+    visibility 0s linear var(--ribbon-slide-duration);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ribbon-slot,
+  .ribbon-slot[data-hidden] {
+    /* State change, no travel. */
+    transition: none;
+  }
+}
+
 /* ── Canvas (the scrollable grey field) ─────────────────────── */
 
 .page-canvas {
@@ -141,19 +208,144 @@
 }
 
 /*
- * Inner wrapper is kept separate so M3 can convert this to a grid
- * (page-column | comment-rail-column) without touching .page-sheet styles.
+ * Page column plus comment-rail column — the grid M1 left room for.
+ *
+ * Layout tiers, all derived from --page-width / --rail-width / --rail-gap /
+ * --canvas-gutter (see styles/global.css):
+ *
+ *   >= 1512px  the right gutter alone is wide enough for the rail, so the page
+ *              stays exactly centred in the viewport and the rail sits in the
+ *              margin beside it — the Word arrangement.
+ *   >= 1188px  not enough room for that, so page + rail are centred as a group
+ *              and the page sits left of centre. Still no overlap.
+ *    < 1188px  no room beside the page at all: the rail floats over the page's
+ *              right margin instead of squeezing or reflowing the document.
+ *
+ * Whichever tier applies, the rail's space is reserved at all times and does
+ * not depend on the mode or on whether any comments exist, so nothing the
+ * annotations lane renders can move the page.
+ *
+ * The top padding permanently includes the ribbon's height: the ribbon is an
+ * overlay (see .ribbon-slot), so this is what keeps the top of the page clear
+ * of it in edit mode without the canvas geometry ever changing.
  */
 .page-canvas-inner {
-  display: flex;
-  justify-content: center;
-  padding: var(--canvas-pad-top) 24px var(--canvas-pad-bottom);
+  position: relative;
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1fr)
+    min(var(--page-width), 100%)
+    minmax(0, 1fr);
+  padding:
+    calc(var(--ribbon-height) + var(--canvas-pad-top))
+    var(--canvas-gutter)
+    var(--canvas-pad-bottom);
   min-height: 100%;
+}
+
+/* ── Comment rail ───────────────────────────────────────────
+ *
+ * Inside the scrolling canvas, never fixed: a bubble belongs beside its
+ * anchor, so the rail scrolls with the document. It is stretched to the full
+ * height of the page row and is a positioned ancestor, so the annotations lane
+ * can place bubbles at anchor offsets inside it.
+ */
+.comment-rail {
+  min-width: 0;
+  /* Narrow tier: overlay the page's right margin rather than reflow the doc. */
+  position: absolute;
+  top: calc(var(--ribbon-height) + var(--canvas-pad-top));
+  right: var(--canvas-gutter);
+  width: min(var(--rail-width), calc(100% - 2 * var(--canvas-gutter)));
+  /* Lifts whatever the annotations lane renders off the page underneath. */
+  filter: drop-shadow(0 2px 10px var(--color-shadow));
+}
+
+/* Rail fits beside the page: page + rail centred as a group. */
+@media (min-width: 1188px) {
+  .page-canvas-inner {
+    grid-template-columns:
+      minmax(0, 1fr)
+      min(var(--page-width), 100%)
+      calc(var(--rail-gap) + var(--rail-width))
+      minmax(0, 1fr);
+  }
+
+  .comment-rail {
+    position: relative;
+    top: auto;
+    right: auto;
+    grid-column: 3;
+    margin-left: var(--rail-gap);
+    width: var(--rail-width);
+    filter: none;
+  }
+}
+
+/* Right gutter alone fits the rail: page dead centre, rail in the margin. */
+@media (min-width: 1512px) {
+  .page-canvas-inner {
+    grid-template-columns:
+      minmax(0, 1fr)
+      min(var(--page-width), 100%)
+      minmax(0, 1fr);
+  }
+
+  .comment-rail {
+    justify-self: start;
+  }
+}
+
+/*
+ * Review mode is about the rail; edit mode is about the text. The difference
+ * is carried by opacity alone — anything geometric here would move the page
+ * when the mode changes.
+ */
+.shell[data-mode="edit"] .comment-rail {
+  opacity: 0.7;
+  transition: opacity var(--ribbon-slide-duration) var(--ribbon-slide-ease);
+}
+
+.shell[data-mode="edit"] .comment-rail:hover,
+.shell[data-mode="edit"] .comment-rail:focus-within,
+.shell[data-mode="review"] .comment-rail {
+  opacity: 1;
+  transition: opacity var(--ribbon-slide-duration) var(--ribbon-slide-ease);
+}
+
+/*
+ * Narrow tier only. There the rail sits ON the page, so a dimmed rail would be
+ * translucent bubbles over the text they annotate — unreadable, and in the way
+ * of the writing the user came to do. Comments therefore appear only while
+ * reviewing. Hiding an overlay moves nothing: it is out of flow, so the page
+ * geometry is the same either way (proved alongside the ribbon measurements).
+ * `visibility` — not `display` — so it also leaves the tab order and the
+ * accessibility tree while parked.
+ */
+@media (max-width: 1187.98px) {
+  .shell[data-mode="edit"] .comment-rail,
+  .shell[data-mode="edit"] .comment-rail:hover,
+  .shell[data-mode="edit"] .comment-rail:focus-within {
+    opacity: 0;
+    visibility: hidden;
+    transition:
+      opacity var(--ribbon-slide-duration) var(--ribbon-slide-ease),
+      visibility 0s linear var(--ribbon-slide-duration);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .comment-rail,
+  .shell[data-mode="edit"] .comment-rail,
+  .shell[data-mode="review"] .comment-rail {
+    transition: none;
+  }
 }
 
 /* ── Page sheet (the white document) ───────────────────────── */
 
 .page-sheet {
+  grid-column: 2;
   flex-shrink: 0;
   /* Gracefully fills viewport below the page width + canvas gutters */
   width: min(var(--page-width), 100%);

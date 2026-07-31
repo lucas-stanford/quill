@@ -1,5 +1,10 @@
 /* ── Ribbon bar ─────────────────────────────────────────────── */
 
+/*
+ * Lives inside .ribbon-slot, which overlays the top of the canvas — so this
+ * bar must be fully opaque and lifted, because the document scrolls beneath
+ * it. See the note on .ribbon-slot in AppShell.css.
+ */
 .ribbon {
   flex-shrink: 0;
   display: flex;
@@ -9,6 +14,7 @@
   gap: 2px;
   background: var(--color-titlebar-bg);
   border-bottom: 1px solid var(--color-titlebar-border);
+  box-shadow: 0 2px 6px var(--color-shadow);
 }
 
 /* ── Group separator ─────────────────────────────────────────── */
@@ -102,4 +108,11 @@
 .ribbon-btn:disabled {
   opacity: 0.35;
   cursor: default;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ribbon-btn,
+  .ribbon-style-select {
+    transition: none;
+  }
 }

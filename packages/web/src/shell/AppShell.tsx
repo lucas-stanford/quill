@@ -39,8 +39,15 @@ export function AppShell({
   commentRail,
   children,
 }: AppShellProps) {
+  /*
+   * The ribbon stays mounted in both modes and slides on `transform`.
+   * Unmounting it (or animating its height) would collapse its space and
+   * shove the page up — precisely the jump this must never cause.
+   */
+  const ribbonHidden = mode !== "edit";
+
   return (
-    <div className="shell">
+    <div className="shell" data-mode={mode}>
       <header className="titlebar">
         <div className="titlebar-brand" aria-label="Quill">
           <QuillNib />
@@ -56,7 +63,21 @@ export function AppShell({
         </div>
       </header>
 
-      {mode === "edit" ? toolbar : null}
+      {/*
+       * `inert` while hidden so a keyboard user cannot Tab into a toolbar they
+       * cannot see, and so screen readers skip it. It is belt and braces with
+       * the CSS `visibility: hidden` applied once the slide finishes: `inert`
+       * covers the 200 ms while the ribbon is still visible but on its way
+       * out, `visibility` covers browsers without `inert`.
+       */}
+      <div
+        className="ribbon-slot"
+        data-hidden={ribbonHidden || undefined}
+        inert={ribbonHidden}
+        aria-hidden={ribbonHidden || undefined}
+      >
+        {toolbar}
+      </div>
 
       <main className="page-canvas">
         <div className="page-canvas-inner">
@@ -67,7 +88,18 @@ export function AppShell({
             )}
             {status === "ready" && children}
           </div>
-          {commentRail}
+          {/*
+           * The rail's column is reserved whether or not there are comments,
+           * so the first bubble to arrive cannot shift the page sideways.
+           * Empty, it is not announced as a landmark.
+           */}
+          <aside
+            className="comment-rail"
+            aria-label="Comments"
+            aria-hidden={commentRail ? undefined : true}
+          >
+            {commentRail}
+          </aside>
         </div>
       </main>
     </div>
