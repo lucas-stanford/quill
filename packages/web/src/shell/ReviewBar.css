@@ -30,8 +30,16 @@
 }
 
 .review-bar-slot[data-hidden] {
-  /* Clear of the window bottom, shadow and all. */
-  transform: translateY(calc(100% + var(--review-bar-offset) + 12px));
+  /*
+   * Parked just below its resting place — deliberately less than
+   * `--review-bar-offset`, so the parked bar stays inside the window. A bigger
+   * slide would look tidier in isolation and would be a bug: a transformed box
+   * past the bottom edge counts as scrollable overflow, the root grows a
+   * scrollbar, and the whole layout narrows by its width the moment the bar
+   * appears or leaves. Opacity and visibility do the hiding; the transform is
+   * only there to give it somewhere to rise from.
+   */
+  transform: translateY(12px);
   opacity: 0;
   /*
    * Applied once the slide has finished, so the parked bar is neither hittable

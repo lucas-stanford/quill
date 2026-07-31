@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  NOTHING_TO_SEND,
   canSend,
   describePending,
+  isRefusal,
   presentRevision,
   transportFailure,
   updateButtonHint,
@@ -42,6 +44,35 @@ describe("presentRevision", () => {
 
   it("tells the user where the revision went", () => {
     expect(presentRevision("done", null).announcement).toMatch(/tracked changes/i);
+  });
+
+  it("speaks a refusal in its own words, without blaming the agent", () => {
+    const shown = presentRevision("idle", NOTHING_TO_SEND);
+    expect(shown.label).toBe(NOTHING_TO_SEND);
+    expect(shown.announcement).toBe(NOTHING_TO_SEND);
+    expect(shown.tone).toBe("error");
+    expect(shown.busy).toBe(false);
+    expect(shown.label).not.toMatch(/failed/i);
+  });
+});
+
+describe("isRefusal", () => {
+  it("is a message with no request behind it", () => {
+    expect(isRefusal("idle", NOTHING_TO_SEND)).toBe(true);
+    expect(isRefusal("idle", null)).toBe(false);
+    expect(isRefusal("idle", "   ")).toBe(false);
+  });
+
+  it("is never a failure, which the agent did produce", () => {
+    expect(isRefusal("failed", "copilot: command not found")).toBe(false);
+    expect(isRefusal("working", null)).toBe(false);
+  });
+});
+
+describe("NOTHING_TO_SEND", () => {
+  it("says what to do next, not just what went wrong", () => {
+    expect(NOTHING_TO_SEND).toMatch(/instruction/i);
+    expect(NOTHING_TO_SEND).toMatch(/accept or reject/i);
   });
 });
 

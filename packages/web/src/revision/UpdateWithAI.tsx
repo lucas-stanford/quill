@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { RevisionApi } from "./useRevision";
-import { canSend, describePending, presentRevision, updateButtonHint } from "./status";
+import {
+  canSend,
+  describePending,
+  isRefusal,
+  presentRevision,
+  updateButtonHint,
+} from "./status";
 import "./UpdateWithAI.css";
 
 /** FROZEN PROP CONTRACT — rendered in the title bar. */
@@ -23,10 +29,11 @@ const QUIET_NOTICE_MS = 3000;
  *
  * Shape: a split button. The main half sends what is already pending in one
  * click — the common case, and the count is on the button so nobody sends an
- * empty brief by accident. The caret half opens a small instruction popover for
- * the times a note is worth adding. Pressing the main half with nothing pending
- * does not fire a pointless request: it opens the popover with the warning,
- * because a request that cannot change anything is worse than a prompt.
+ * empty brief by accident. With nothing pending it is disabled, because a
+ * request that cannot change anything hands the model a document it was not
+ * asked to touch. The caret half stays live and opens a small instruction
+ * popover: a note of your own is a thing worth sending on its own, and it is
+ * the way out of the disabled state.
  *
  * In flight, the button is replaced in place by a status pill with a cancel
  * button. Nothing covers the document: the agent works, the user keeps reading.
@@ -37,6 +44,8 @@ const QUIET_NOTICE_MS = 3000;
 export function UpdateWithAI({ revision, pendingCount }: UpdateWithAIProps) {
   const { status, error, start, cancel } = revision;
   const presentation = presentRevision(status, error);
+  /** Idle with a message: nothing was sent, and the words say why. */
+  const refusal = isRefusal(status, error);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [instruction, setInstruction] = useState("");
@@ -46,6 +55,7 @@ export function UpdateWithAI({ revision, pendingCount }: UpdateWithAIProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mainButtonRef = useRef<HTMLButtonElement>(null);
+  const moreButtonRef = useRef<HTMLButtonElement>(null);
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
   /** Focus is returned to whatever opened the popover when it closes. */
   const returnFocusRef = useRef<HTMLElement | null>(null);
@@ -87,7 +97,14 @@ export function UpdateWithAI({ revision, pendingCount }: UpdateWithAIProps) {
     if (!swapped) return;
     const active = document.activeElement;
     if (active && active !== document.body) return;
-    (presentation.busy ? cancelButtonRef.current : mainButtonRef.current)?.focus();
+    if (presentation.busy) {
+      cancelButtonRef.current?.focus();
+      return;
+    }
+    // The main half can come back disabled: a revision that lands leaves AI
+    // changes pending and nothing of the reviewer's left to send.
+    const main = mainButtonRef.current;
+    (main && !main.disabled ? main : moreButtonRef.current)?.focus();
   }, [presentation.busy]);
 
   // Escape closes wherever focus is; a click outside dismisses it.
@@ -114,42 +131,38 @@ export function UpdateWithAI({ revision, pendingCount }: UpdateWithAIProps) {
 
   /*
    * The outcome notice. "Applied" and "Cancelled" fade themselves out so the
-   * button comes back without a click; a failure stays until it is dismissed or
-   * retried, because a failure the user never saw is a dead end.
+   * button comes back without a click; a failure — and a refusal to send an
+   * empty brief — stays until it is dismissed or retried, because a message
+   * the user never saw is a dead end.
    */
   useEffect(() => {
-    if (status === "idle" || presentation.busy) {
+    if (presentation.busy || (status === "idle" && !refusal)) {
       setNoticeShown(false);
       return;
     }
     setNoticeShown(true);
-    if (status === "failed") return;
+    if (status === "failed" || refusal) return;
     const timer = window.setTimeout(
       () => setNoticeShown(false),
       status === "done" ? DONE_NOTICE_MS : QUIET_NOTICE_MS,
     );
     return () => window.clearTimeout(timer);
-  }, [status, presentation.busy]);
+  }, [status, refusal, presentation.busy]);
 
   const send = useCallback(
     (note?: string) => {
       const trimmed = note?.trim() ? note.trim() : undefined;
       lastInstructionRef.current = trimmed;
       setInstruction("");
+      // Pressing send on a refusal that is already showing leaves the hook's
+      // state untouched, so nothing would re-render the notice back in.
+      if (refusal) setNoticeShown(true);
       start(trimmed);
     },
-    [start],
+    [refusal, start],
   );
 
-  const onPrimary = useCallback(() => {
-    // Nothing pending: warn rather than send a brief that cannot change
-    // anything. The popover carries the warning and the way out of it.
-    if (!canSend(pendingCount, "")) {
-      openDialog();
-      return;
-    }
-    send();
-  }, [openDialog, pendingCount, send]);
+  const onPrimary = useCallback(() => send(), [send]);
 
   const onDialogSubmit = useCallback(() => {
     if (!canSend(pendingCount, instruction)) return;
@@ -185,12 +198,16 @@ export function UpdateWithAI({ revision, pendingCount }: UpdateWithAIProps) {
           </button>
         </div>
       ) : (
-        <div className="uwai-split">
+        <div
+          className={`uwai-split${canSend(pendingCount, "") ? "" : " uwai-split--empty"}`}
+          title={updateButtonHint(pendingCount)}
+        >
           <button
             type="button"
             className="uwai-main"
             ref={mainButtonRef}
             title={updateButtonHint(pendingCount)}
+            disabled={!canSend(pendingCount, "")}
             onClick={onPrimary}
           >
             <SparkleIcon />
@@ -205,8 +222,13 @@ export function UpdateWithAI({ revision, pendingCount }: UpdateWithAIProps) {
           <button
             type="button"
             className="uwai-more"
+            ref={moreButtonRef}
             aria-label="Add an instruction for the agent"
-            title="Add an instruction…"
+            title={
+              canSend(pendingCount, "")
+                ? "Add an instruction…"
+                : "Nothing is pending — add an instruction…"
+            }
             aria-haspopup="dialog"
             aria-expanded={dialogOpen}
             onClick={() => (dialogOpen ? closeDialog() : openDialog())}
@@ -219,20 +241,31 @@ export function UpdateWithAI({ revision, pendingCount }: UpdateWithAIProps) {
       {noticeShown && (
         <div
           className={`uwai-notice uwai-notice--${presentation.tone}`}
-          role={status === "failed" ? "alert" : undefined}
+          role={status === "failed" || refusal ? "alert" : undefined}
         >
           <span className="uwai-notice-icon" aria-hidden="true">
-            {status === "done" ? <CheckIcon /> : status === "failed" ? <AlertIcon /> : null}
+            {status === "done" ? (
+              <CheckIcon />
+            ) : status === "failed" || refusal ? (
+              <AlertIcon />
+            ) : null}
           </span>
           <span className="uwai-notice-text">{presentation.label}</span>
-          {status === "failed" && (
+          {(status === "failed" || refusal) && (
             <span className="uwai-notice-actions">
               <button
                 type="button"
                 className="uwai-notice-btn"
-                onClick={() => send(lastInstructionRef.current)}
+                onClick={() => {
+                  if (refusal) {
+                    setNoticeShown(false);
+                    openDialog();
+                  } else {
+                    send(lastInstructionRef.current);
+                  }
+                }}
               >
-                Try again
+                {refusal ? "Add an instruction…" : "Try again"}
               </button>
               <button
                 type="button"

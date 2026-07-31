@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AnnotationsApi } from "../annotations";
 import type { TrackedChangesApi } from "../tracking";
 import type { RevisionState, RevisionStatus } from "../types";
 import { cancelRevision, fetchRevision, requestRevision } from "../api";
-import { composeBrief } from "./compose";
+import { composeBrief, renderPrompt, withInstruction } from "./compose";
 import { decideApply } from "./applyPlan";
 import { runRevision, timerDelay } from "./runner";
-import { transportFailure } from "./status";
+import { NOTHING_TO_SEND, transportFailure } from "./status";
 
 export interface UseRevisionOptions {
   enabled: boolean;
@@ -59,6 +59,13 @@ export interface RevisionApi {
  *     `markdown` App loads us with has changed — so the pre-revision document
  *     is put back and the rewrite is re-applied on top of it as tracked
  *     changes. `decideApply` picks between the two and is unit-tested.
+ *
+ * The brief goes out with the prompt rendered from it, because the CLI sends
+ * that prompt verbatim in detached mode rather than re-deriving it across the
+ * package boundary (CONTRACT.md). Building it scans the plan, so the brief is
+ * memoized on exactly what it is made of — the markdown, the comments and the
+ * changes — and the popover's instruction is attached to that memo rather than
+ * costing another scan.
  */
 export function useRevision({
   enabled,
@@ -72,11 +79,9 @@ export function useRevision({
   /** Live values for the async loop, which outlives any one render. */
   const enabledRef = useRef(enabled);
   const markdownRef = useRef(markdown);
-  const annotationsRef = useRef(annotations);
   const trackingRef = useRef(tracking);
   enabledRef.current = enabled;
   markdownRef.current = markdown;
-  annotationsRef.current = annotations;
   trackingRef.current = tracking;
 
   const abortRef = useRef<AbortController | null>(null);
@@ -85,6 +90,20 @@ export function useRevision({
   /** Id of the revision already in the document; guards against a double apply. */
   const appliedIdRef = useRef<string | null>(null);
   const aliveRef = useRef(true);
+
+  /**
+   * The brief as it stands. Rebuilt when — and only when — the plan, the
+   * comments or the tracked changes change: `buildBrief` scans the plan to
+   * place the markup in it, and the control above re-renders for reasons
+   * (status pills, popover, notice timers) that cannot change what is in the
+   * brief.
+   */
+  const brief = useMemo(
+    () => composeBrief(markdown, annotations, tracking),
+    [markdown, annotations, tracking],
+  );
+  const briefRef = useRef(brief);
+  briefRef.current = brief;
 
   useEffect(() => {
     aliveRef.current = true;
@@ -154,12 +173,14 @@ export function useRevision({
       // A second press while the agent is working is a mis-click, not a queue.
       if (abortRef.current) return;
 
-      const brief = composeBrief(
-        markdownRef.current,
-        annotationsRef.current,
-        trackingRef.current,
-        instruction,
-      );
+      const brief = withInstruction(briefRef.current, instruction);
+      const prompt = renderPrompt(brief);
+      if (prompt === null) {
+        // Nothing was asked for. No request goes out, so the machine stays
+        // idle and the words explain why (see `presentRevision`).
+        settle("idle", NOTHING_TO_SEND);
+        return;
+      }
 
       baselineRef.current = markdownRef.current;
       const controller = new AbortController();
@@ -169,6 +190,7 @@ export function useRevision({
       runRevision({
         transport: { request: requestRevision, poll: fetchRevision },
         brief,
+        prompt,
         signal: controller.signal,
         delay: timerDelay,
         onState: (state) => {

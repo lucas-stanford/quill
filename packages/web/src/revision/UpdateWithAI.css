@@ -105,6 +105,42 @@
   font-weight: 600;
 }
 
+/*
+ * Nothing pending. The send half is genuinely disabled — an empty brief asks
+ * the model to rewrite a document nobody marked up — so the control drops its
+ * accent fill and says so. The caret half stays live: an instruction of your
+ * own is a thing worth sending, and it is the way out of this state. The
+ * outline is an inset shadow, not a border, so the swap cannot change the
+ * control's size and nudge the title bar.
+ */
+.uwai-split--empty {
+  background: transparent;
+  color: var(--color-text-muted);
+  box-shadow: inset 0 0 0 1px var(--color-rule);
+}
+
+.uwai-split--empty .uwai-main {
+  cursor: default;
+  opacity: 0.8;
+}
+
+.uwai-split--empty .uwai-main:hover,
+.uwai-split--empty .uwai-main:active {
+  background: transparent;
+}
+
+.uwai-split--empty .uwai-more {
+  border-left-color: var(--color-rule);
+}
+
+.uwai-split--empty .uwai-more:hover {
+  background: var(--color-surface-raised);
+}
+
+.uwai-split--empty .uwai-count {
+  background: var(--color-rule);
+}
+
 /* ── In flight ───────────────────────────────────────────────
  * Replaces the button in place. Deliberately confined to the title bar: the
  * document must stay readable and scrollable while the agent works, so nothing

@@ -50,13 +50,20 @@ export function pollDelay(attempt: number): number {
 }
 
 export interface RevisionTransport {
-  request: (brief: RevisionBrief) => Promise<RevisionState>;
+  /**
+   * The brief and the prompt rendered from it travel together: the CLI sends
+   * the prompt verbatim in detached mode rather than re-deriving it across the
+   * package boundary (CONTRACT.md, "The prompt crosses the wire").
+   */
+  request: (brief: RevisionBrief, prompt: string) => Promise<RevisionState>;
   poll: () => Promise<RevisionState>;
 }
 
 export interface RunRevisionOptions {
   transport: RevisionTransport;
   brief: RevisionBrief;
+  /** `formatBriefPrompt(brief)`; never empty — the caller guards. */
+  prompt: string;
   /** Aborted on cancel and on unmount; the loop then resolves with null. */
   signal: AbortSignal;
   /** Injected so tests do not wait. */
@@ -78,6 +85,7 @@ export interface RunRevisionOptions {
 export async function runRevision({
   transport,
   brief,
+  prompt,
   signal,
   delay,
   onState,
@@ -86,7 +94,7 @@ export async function runRevision({
 }: RunRevisionOptions): Promise<RevisionState | null> {
   const startedAt = now();
 
-  const first = await transport.request(brief);
+  const first = await transport.request(brief, prompt);
   if (signal.aborted) return null;
   onState?.(first);
   if (isTerminal(first.status)) return first;

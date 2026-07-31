@@ -11,6 +11,7 @@ import {
 } from "./runner";
 
 const BRIEF: RevisionBrief = { markdown: "# Plan\n", comments: [], edits: [] };
+const PROMPT = "You are revising a Markdown plan document.\n…\n# Plan\n";
 
 function state(status: RevisionState["status"], extra: Partial<RevisionState> = {}): RevisionState {
   return { id: "r1", status, mode: "attached", ...extra };
@@ -19,13 +20,16 @@ function state(status: RevisionState["status"], extra: Partial<RevisionState> = 
 /** A transport that hands out a scripted sequence of poll results. */
 function scripted(first: RevisionState, polls: (RevisionState | Error)[]) {
   const seen: string[] = [];
+  const sent: { brief: RevisionBrief; prompt: string }[] = [];
   let index = 0;
   return {
     seen,
+    sent,
     calls: () => index,
     transport: {
-      request: async (brief: RevisionBrief) => {
+      request: async (brief: RevisionBrief, prompt: string) => {
         seen.push(`request:${brief.markdown.length}`);
+        sent.push({ brief, prompt });
         return first;
       },
       poll: async () => {
@@ -80,6 +84,7 @@ describe("runRevision", () => {
     const final = await runRevision({
       transport: script.transport,
       brief: BRIEF,
+      prompt: PROMPT,
       signal: new AbortController().signal,
       delay: noDelay,
       onState: (s) => seen.push(s.status),
@@ -90,12 +95,29 @@ describe("runRevision", () => {
     expect(seen).toEqual(["queued", "working", "working", "done"]);
   });
 
+  it("sends the rendered prompt alongside the brief", async () => {
+    const script = scripted(state("done", { markdown: "# Revised\n" }), []);
+
+    await runRevision({
+      transport: script.transport,
+      brief: BRIEF,
+      prompt: PROMPT,
+      signal: new AbortController().signal,
+      delay: noDelay,
+    });
+
+    // The CLI sends this string to the model verbatim in detached mode; it
+    // must arrive exactly as the browser rendered it.
+    expect(script.sent).toEqual([{ brief: BRIEF, prompt: PROMPT }]);
+  });
+
   it("returns the first response without polling when it is already terminal", async () => {
     const script = scripted(state("done", { markdown: "# Revised\n" }), [state("done")]);
 
     const final = await runRevision({
       transport: script.transport,
       brief: BRIEF,
+      prompt: PROMPT,
       signal: new AbortController().signal,
       delay: noDelay,
     });
@@ -111,6 +133,7 @@ describe("runRevision", () => {
     const final = await runRevision({
       transport: script.transport,
       brief: BRIEF,
+      prompt: PROMPT,
       signal: controller.signal,
       // Cancel lands while we are waiting between polls, as it does in the UI.
       delay: () => {
@@ -132,6 +155,7 @@ describe("runRevision", () => {
     const final = await runRevision({
       transport: script.transport,
       brief: BRIEF,
+      prompt: PROMPT,
       signal: new AbortController().signal,
       delay: noDelay,
     });
@@ -146,6 +170,7 @@ describe("runRevision", () => {
       runRevision({
         transport: script.transport,
         brief: BRIEF,
+        prompt: PROMPT,
         signal: new AbortController().signal,
         delay: noDelay,
       }),
@@ -161,6 +186,7 @@ describe("runRevision", () => {
           poll: () => Promise.reject(new Error("unused")),
         },
         brief: BRIEF,
+        prompt: PROMPT,
         signal: new AbortController().signal,
         delay: noDelay,
       }),
@@ -175,6 +201,7 @@ describe("runRevision", () => {
     const final = await runRevision({
       transport: script.transport,
       brief: BRIEF,
+      prompt: PROMPT,
       signal: new AbortController().signal,
       delay: noDelay,
     });
@@ -189,6 +216,7 @@ describe("runRevision", () => {
     const final = await runRevision({
       transport: script.transport,
       brief: BRIEF,
+      prompt: PROMPT,
       signal: new AbortController().signal,
       delay: noDelay,
     });
@@ -208,6 +236,7 @@ describe("runRevision", () => {
     const final = await runRevision({
       transport: script.transport,
       brief: BRIEF,
+      prompt: PROMPT,
       signal: new AbortController().signal,
       delay: noDelay,
     });
@@ -223,6 +252,7 @@ describe("runRevision", () => {
       runRevision({
         transport: script.transport,
         brief: BRIEF,
+        prompt: PROMPT,
         signal: new AbortController().signal,
         delay: noDelay,
         now: () => (clock += 60_000),

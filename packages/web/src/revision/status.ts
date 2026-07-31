@@ -25,8 +25,7 @@ export function presentRevision(
   status: RevisionStatus,
   error: string | null,
 ): RevisionPresentation {
-  switch (status) {
-    case "queued":
+  switch (status) {    case "queued":
       return {
         label: "Sending…",
         announcement: "Sending your comments and edits to the agent.",
@@ -64,8 +63,38 @@ export function presentRevision(
       };
     case "idle":
     default:
+      /*
+       * Idle with a message is a refusal, not a failure: the request was never
+       * made, because the brief asked for nothing. Saying "the revision
+       * failed" would blame the agent for a round trip it never saw.
+       */
+      if (error?.trim()) {
+        return {
+          label: error.trim(),
+          announcement: error.trim(),
+          tone: "error",
+          busy: false,
+        };
+      }
       return { label: "Update with AI", announcement: "", tone: "idle", busy: false };
   }
+}
+
+/**
+ * Nothing was sent because the brief was empty. Reached when review markup is
+ * pending but none of it is the reviewer's — AI insertions and deletions from
+ * an earlier round trip are proposals awaiting a decision, not instructions, so
+ * `buildBrief` leaves them out and the brief can be empty while the button's
+ * count is not.
+ */
+export const NOTHING_TO_SEND =
+  "Nothing to send — the agent acts on your comments and edits, and none are " +
+  "pending. AI changes on the page are yours to accept or reject; add an " +
+  "instruction to ask for something else.";
+
+/** True when the control is showing a local refusal rather than an outcome. */
+export function isRefusal(status: RevisionStatus, error: string | null): boolean {
+  return status === "idle" && !!error?.trim();
 }
 
 /** What the button's badge says about the review markup waiting to be sent. */
