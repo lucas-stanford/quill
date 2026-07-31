@@ -1,6 +1,6 @@
 ---
 id: qui-81kh
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-07-31T20:44:43Z
@@ -19,3 +19,9 @@ The document is loaded programmatically with emitUpdate:false, so the selection-
 
 Ribbon state is correct on first paint, before any user interaction.
 
+
+## Notes
+
+**2026-07-31T21:36:09Z**
+
+Fixed. Root cause was not a stale subscription: setContent maps the outgoing selection through a whole-document replacement, so the caret from the empty initial document lands at the END of the loaded one. PLAN.md ends with a bulleted list, so the ribbon was faithfully describing a caret nobody placed. Fixed by gating on a caret the user actually owns and deriving state at render time rather than caching it.

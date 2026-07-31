@@ -6,10 +6,13 @@
   "bin": {
     "quill": "./dist/cli.js"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup && node ./scripts/copy-web.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node src/__tests__/run.mjs"
   },
   "dependencies": {
     "open": "^11.0.0"

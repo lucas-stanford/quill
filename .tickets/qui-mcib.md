@@ -1,6 +1,6 @@
 ---
 id: qui-mcib
-status: open
+status: in_progress
 deps: [qui-7fd0]
 links: []
 created: 2026-07-31T20:41:59Z

@@ -1,6 +1,6 @@
 ---
 id: qui-0ull
-status: open
+status: in_progress
 deps: [qui-79yv]
 links: []
 created: 2026-07-31T18:51:14Z

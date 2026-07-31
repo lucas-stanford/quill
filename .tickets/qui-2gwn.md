@@ -1,6 +1,6 @@
 ---
 id: qui-2gwn
-status: open
+status: in_progress
 deps: []
 links: []
 created: 2026-07-31T20:35:47Z

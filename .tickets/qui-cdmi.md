@@ -1,6 +1,6 @@
 ---
 id: qui-cdmi
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-07-31T20:35:47Z
@@ -16,3 +16,9 @@ M2 implements live sync with Server-Sent Events, not WebSockets. The ASCII diagr
 
 PLAN.md describes the transport actually in use.
 
+
+## Notes
+
+**2026-07-31T21:36:09Z**
+
+PLAN.md diagram now reads 'sse live sync'.

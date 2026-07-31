@@ -1,6 +1,6 @@
 ---
 id: qui-u2o3
-status: in_progress
+status: closed
 deps: []
 links: []
 created: 2026-07-31T20:36:51Z

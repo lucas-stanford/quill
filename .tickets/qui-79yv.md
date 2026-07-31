@@ -1,6 +1,6 @@
 ---
 id: qui-79yv
-status: in_progress
+status: closed
 deps: [qui-y5xu]
 links: []
 created: 2026-07-31T18:51:14Z
