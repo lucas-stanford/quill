@@ -1,0 +1,17 @@
+{
+  "name": "quill-workspace",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "pnpm -F @quill/web build && pnpm -F @quill/cli build",
+    "dev:web": "pnpm -F @quill/web dev",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild"]
+  },
+  "packageManager": "pnpm@10.28.1"
+}
