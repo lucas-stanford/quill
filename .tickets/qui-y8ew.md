@@ -1,6 +1,6 @@
 ---
 id: qui-y8ew
-status: in_progress
+status: closed
 deps: [qui-r1t9]
 links: []
 created: 2026-07-31T21:32:47Z
@@ -25,3 +25,11 @@ Mode lives in App as EditorMode = 'edit' | 'review' and is passed to AppShell. A
 
 Switching modes slides the ribbon in and out with zero movement of the page or document text; the ribbon is absent in review mode.
 
+
+## Notes
+
+**2026-07-31T22:13:01Z**
+
+Done and merged. The ribbon is overlaid rather than space-reserved — pinned under the title bar, painted over the canvas, with the canvas carrying permanent top padding so its geometry never changes. Review mode gets the gutter back instead of a permanent empty band of chrome, which is what Word actually does.
+
+Zero movement proven by measurement, not by eye: page sheet, a paragraph of text, canvas rect, scrollTop and scrollY sampled before, 90ms into each slide, and after, in both directions — all five samples byte-identical. Only transform animates. Hidden ribbon is inert plus visibility:hidden, and a 14-stop Tab sweep never enters it. Reduced motion parks it instantly.

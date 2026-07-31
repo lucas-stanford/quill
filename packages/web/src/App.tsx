@@ -85,7 +85,7 @@ export default function App() {
   const editor = usePlanEditor({ markdown: doc?.markdown ?? "", onChange: handleChange });
 
   const annotations = useAnnotations({ editor, enabled: status === "ready" });
-  useTrackedChanges({ editor, enabled: status === "ready" });
+  const tracking = useTrackedChanges({ editor, enabled: status === "ready" });
 
   useLivePlan({
     enabled: status === "ready",
@@ -135,6 +135,7 @@ export default function App() {
       commentRail={
         status === "ready" ? <CommentRail annotations={annotations} /> : null
       }
+      tracking={status === "ready" ? tracking : undefined}
     >
       {doc ? <PlanEditor editor={editor} /> : null}
     </AppShell>

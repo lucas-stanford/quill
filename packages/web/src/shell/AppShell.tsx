@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { TrackedChangesApi } from "../tracking";
 import type { EditorMode, LoadStatus, SaveState } from "../types";
 import { useTheme } from "../theme";
 import "./AppShell.css";
@@ -24,6 +25,8 @@ export interface AppShellProps {
   modeSwitch?: ReactNode;
   /** Comment bubbles, rendered in the right margin beside the page. */
   commentRail?: ReactNode;
+  /** Tracked-change controls. M4 surfaces accept/reject from here. */
+  tracking?: TrackedChangesApi;
   /** The editor. Render it inside the white page. */
   children: ReactNode;
 }
@@ -37,6 +40,7 @@ export function AppShell({
   mode = "edit",
   modeSwitch,
   commentRail,
+  tracking: _tracking,
   children,
 }: AppShellProps) {
   /*
