@@ -4,6 +4,8 @@ import { fileURLToPath } from "node:url";
 import open from "open";
 import { parseCliArgs } from "./args.js";
 import { startServer } from "./server.js";
+import { AGENT_COMMAND } from "./revision.js";
+import { QUILL_DIR, REQUEST_FILENAME } from "./revision-protocol.js";
 
 async function main(): Promise<void> {
   const args = parseCliArgs();
@@ -42,7 +44,10 @@ async function main(): Promise<void> {
   });
 
   // Start server, scanning upward from preferred port on EADDRINUSE
-  const server = await startServer(filePath, webRoot, args.port).catch((err: unknown) => {
+  const server = await startServer(filePath, webRoot, args.port, {
+    mode: args.mode,
+    revisionTimeoutMs: args.revisionTimeoutMs,
+  }).catch((err: unknown) => {
     console.error(`quill: failed to start server — ${(err as Error).message}`);
     process.exit(1);
   });
@@ -54,14 +59,26 @@ async function main(): Promise<void> {
   const url = `http://127.0.0.1:${server.port}`;
   console.log(`quill  ${basename(filePath)}`);
   console.log(`  → ${url}`);
+  console.log(
+    args.mode === "attached"
+      ? `  → attached (${args.modeDetail}): "Update with AI" queues ${QUILL_DIR}/${REQUEST_FILENAME} for the parent agent`
+      : `  → detached (${args.modeDetail}): "Update with AI" runs \`${AGENT_COMMAND}\` here`,
+  );
 
   if (args.open) {
     await open(url);
   }
 
-  process.on("SIGINT", () => {
+  const stop = (): void => {
+    // Kill a running agent and clear the queue file before going: a request
+    // left behind would be serviced into a browser that no longer exists.
+    server.shutdownSync();
     process.exit(0);
-  });
+  };
+
+  process.on("SIGINT", stop);
+  // A parent agent that spawned quill is more likely to send SIGTERM than ^C.
+  process.on("SIGTERM", stop);
 }
 
 main().catch((err: unknown) => {
