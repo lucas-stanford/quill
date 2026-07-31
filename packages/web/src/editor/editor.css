@@ -106,6 +106,17 @@
   white-space: inherit;
 }
 
+/*
+ * prosemirror-view injects `.ProseMirror pre { white-space: pre-wrap }` at
+ * runtime. Same specificity as ours but a later stylesheet, so it wins and
+ * wide ASCII diagrams wrap instead of scrolling. The doubled class outranks it
+ * without resorting to !important.
+ */
+.ProseMirror.ProseMirror pre,
+.ProseMirror.ProseMirror pre code {
+  white-space: pre;
+}
+
 /* ── Inline code ──────────────────────────────────────────────────────── */
 
 .ProseMirror code {

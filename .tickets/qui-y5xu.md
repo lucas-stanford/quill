@@ -24,3 +24,15 @@ pnpm workspace. tsup for the CLI, Vite for the app, SPA build output embedded in
 
 'quill PLAN.md' on a clean checkout opens a browser showing the plan as a page-like document. A screenshot reads as a word processor, not a markdown preview.
 
+
+## Notes
+
+**2026-07-31T19:01:19Z**
+
+M1 split into 3 parallel lanes, each in its own git worktree off the scaffold commit 9688ca4:
+
+  m1/cli     ../quill-wt/cli     packages/cli/src/**            CLI args, port scan, localhost server, GET /api/plan
+  m1/editor  ../quill-wt/editor  packages/web/src/editor/**     Tiptap + marked, prose typography
+  m1/chrome  ../quill-wt/chrome  packages/web/src/shell,styles  grey field, white page, title bar, 3 states
+
+Coordination via CONTRACT.md: frozen HTTP contract (PlanResponse), frozen component props (AppShellProps, PlanEditorProps), frozen wiring in App.tsx, and strict file ownership so the merge is conflict-free. Dependencies pre-installed and lockfile committed so no lane touches package.json.
