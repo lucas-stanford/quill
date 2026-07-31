@@ -16,18 +16,31 @@
  * Falling back to a rebuild is always safe. Emitting the wrong stored source is
  * not, so every lookup is an exact match on canonical content or nothing.
  *
+ * ── A rebuild follows the file's own habits ─────────────────────────────────
+ *
+ * "Only blocks the user changed are rebuilt" is not enough on its own, because
+ * a list is one block: edit one item and the whole list is rebuilt, including
+ * every item the user never touched. Anything the rebuild decides for itself
+ * therefore shows up as drift on untouched lines. So the bullet character, the
+ * nesting width and the blank lines between items are all measured from the
+ * file and reproduced, rather than being fixed by this serializer.
+ *
  * Normalisations applied to rebuilt blocks only:
  *   - Prose is soft-wrapped to the detected width (never inside code spans,
  *     links or escapes, and never so that a line opens a new block).
- *   - Bullet markers always use "-" regardless of the original "*" / "+".
  *   - Headings always use ATX style ("## Heading"), never setext.
  *   - Ordered-list indices use the node's `start` attribute.
  *   - Code-block content strips one trailing "\n" if present (marked adds one).
+ *   - Tables are re-emitted column-aligned, with one alignment marker per
+ *     column and every cell pipe escaped. An untouched table never reaches
+ *     this path, so hand-aligned tables keep their own spacing.
  *   - The document ends with exactly one trailing newline.
  */
 
 import type { JSONContent } from "@tiptap/react";
-import type { SourceEntry, SourceMap, SourceSession } from "./source";
+import type { PlanStyle, SourceEntry, SourceMap, SourceSession } from "./source";
+import type { ColumnAlign } from "./table";
+import { escapeCellText, normalizeAlign, renderGfmTable } from "./table";
 import { wrapMarkdown } from "./wrap";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -39,6 +52,8 @@ interface SerializeContext {
   wrap: number;
   /** Verbatim source lookup for this pass, when one is available. */
   session?: SourceSession;
+  /** The file's own list conventions, for items that must be rebuilt. */
+  style?: PlanStyle;
 }
 
 /** Context used to compute canonical keys: no wrapping, no source reuse. */
@@ -250,9 +265,17 @@ function serializeNode(
     case "horizontalRule":
       return `${indent}---\n\n`;
 
+    case "table": {
+      const body = renderGfmTable(tableRows(node), tableAligns(node));
+      if (!body) return "";
+      return `${indent ? indentLines(body, indent) : body}\n\n`;
+    }
+
     case "bulletList": {
+      const marker = bulletMarkerFor(children, ctx);
+      const loose = isLooseList(children, ctx);
       const items = children
-        .map((item) => serializeListItem(item, "-", indent, ctx))
+        .map((item) => serializeListItem(item, marker, indent, ctx, loose))
         .join("");
       // Top-level list: add a blank line after; nested: no extra newline
       return indent === "" ? `${items}\n` : items;
@@ -260,8 +283,11 @@ function serializeNode(
 
     case "orderedList": {
       const start = (node.attrs?.start as number) ?? 1;
+      const loose = isLooseList(children, ctx);
       const items = children
-        .map((item, i) => serializeListItem(item, `${start + i}.`, indent, ctx))
+        .map((item, i) =>
+          serializeListItem(item, `${start + i}.`, indent, ctx, loose),
+        )
         .join("");
       return indent === "" ? `${items}\n` : items;
     }
@@ -278,17 +304,93 @@ function indentLines(text: string, indent: string): string {
     .join("\n");
 }
 
+// ─── Tables ─────────────────────────────────────────────────────────────────
+
+/**
+ * Cell text for one row, with merged cells expanded back into columns.
+ *
+ * GFM cannot express a colspan, so a merged cell is emitted in its first column
+ * followed by empty ones. That loses the merge and keeps the text — the right
+ * way round, since a table the user never merged is unaffected and a merged one
+ * degrades instead of dropping its content.
+ */
+function tableRowCells(row: JSONContent): string[] {
+  const cells: string[] = [];
+  for (const cell of row.content ?? []) {
+    cells.push(tableCellText(cell));
+    for (let i = 1; i < cellSpan(cell); i++) cells.push("");
+  }
+  return cells;
+}
+
+function cellSpan(cell: JSONContent): number {
+  const span = Number(cell.attrs?.colspan ?? 1);
+  return Number.isFinite(span) && span > 1 ? Math.floor(span) : 1;
+}
+
+/**
+ * A cell's blocks flattened to one line of inline markdown.
+ *
+ * Cell content is always canonical: never wrapped, because a newline would end
+ * the row, and never re-indented, because a cell has no column of its own.
+ */
+function tableCellText(cell: JSONContent): string {
+  const parts: string[] = [];
+  for (const child of cell.content ?? []) {
+    const text =
+      child.type === "paragraph"
+        ? serializeInline(child.content)
+        : serializeNode(child, "", CANONICAL).trim();
+    if (text) parts.push(text);
+  }
+  return escapeCellText(parts.join(" "));
+}
+
+/**
+ * One alignment per column, headers first.
+ *
+ * The schema stores alignment per cell, GFM stores it once per column, so the
+ * first cell that states an alignment wins. Rows are visited in document order
+ * and the header row is first, which makes the header the authority whenever it
+ * has an opinion — matching what the delimiter row meant on the way in.
+ */
+function tableAligns(node: JSONContent): ColumnAlign[] {
+  const aligns: ColumnAlign[] = [];
+  for (const row of node.content ?? []) {
+    let column = 0;
+    for (const cell of row.content ?? []) {
+      const align = normalizeAlign(cell.attrs?.align);
+      const span = cellSpan(cell);
+      for (let i = 0; i < span; i++, column++) {
+        if (align && !aligns[column]) aligns[column] = align;
+      }
+    }
+  }
+  return aligns;
+}
+
+function tableRows(node: JSONContent): string[][] {
+  return (node.content ?? [])
+    .filter((row) => row.type === "tableRow")
+    .map(tableRowCells);
+}
+
 function serializeListItem(
   item: JSONContent,
   marker: string,
   indent: string,
   ctx: SerializeContext,
+  loose = false,
 ): string {
   const bullet = `${marker} `;
-  // Continuation lines align with the item's text. That alignment is what makes
-  // nested content belong to this item instead of interrupting the list, so it
-  // follows the marker width rather than a fixed two spaces.
+  // Continuation lines align with the item's text: that alignment is what makes
+  // them belong to this item instead of interrupting the list.
   const contIndent = indent + " ".repeat(bullet.length);
+  // A child list may sit further in than that, because the author put it there.
+  // Reproducing their nesting width is what keeps a rebuilt item from shifting
+  // every nested line under it.
+  const nestIndent =
+    indent + " ".repeat(Math.max(bullet.length, ctx.style?.nestIndent ?? 0));
 
   const verbatim = reuseListItem(item, bullet, indent, ctx);
   if (verbatim !== null) return verbatim;
@@ -308,7 +410,7 @@ function serializeListItem(
         result += `\n${wrapMarkdown(text, ctx.wrap, contIndent, contIndent)}\n`;
       }
     } else if (child.type === "bulletList" || child.type === "orderedList") {
-      result += serializeNode(child, contIndent, ctx);
+      result += serializeNode(child, nestIndent, ctx);
     } else {
       const block = serializeNode(child, contIndent, ctx).trimEnd();
       if (block) result += `\n${block}\n`;
@@ -317,18 +419,35 @@ function serializeListItem(
 
   if (firstParagraph) result += `${indent}${marker}\n`;
 
-  return result;
+  // A loose list has a blank line between items. Reused items carry their own
+  // separator; a rebuilt one has to be given the list's, or editing one item
+  // would close up the gap after it and move every line below.
+  return loose ? `${result}\n` : result;
 }
 
 /**
  * Emit a list item straight from its original source, or `null` to rebuild it.
  *
- * marked reports nested item source dedented to column 0, so stored text is
- * re-indented to the item's current depth. The bullet is checked against the
- * marker we are about to emit: if the item moved — a different depth, or a
- * different number after a reorder — the stored text no longer describes it and
- * we rebuild instead. Re-emitting a stale ordered-list number would change what
- * the document means, which is the one outcome worth being paranoid about.
+ * The bullet is checked against the marker we are about to emit: if the item
+ * moved — a different depth, or a different number after a reorder — the stored
+ * text no longer describes it and we rebuild instead. Re-emitting a stale
+ * ordered-list number would change what the document means, which is the one
+ * outcome worth being paranoid about.
+ *
+ * ── Residual indentation ────────────────────────────────────────────────────
+ *
+ * marked dedents a nested item's source by its *parent's marker width*, not by
+ * however far the author actually indented it. An item written under `- ` at
+ * four spaces is therefore stored as `"  - two"`, with two spaces of the
+ * author's indentation still on the front.
+ *
+ * That leftover is removed here and the item is re-indented from scratch, using
+ * the nesting width measured from the file — so four-space nesting comes back
+ * as four-space nesting, and it is the caller, not the stored string, that
+ * decides what column the item sits in. Testing the *dedented* text for the
+ * bullet is the fix for the reported bug: the check used to run against the raw
+ * text, so every four-space-nested item failed it and got reformatted to two
+ * the first time the user touched anything in the list.
  */
 function reuseListItem(
   item: JSONContent,
@@ -338,10 +457,68 @@ function reuseListItem(
 ): string | null {
   if (!ctx.session) return null;
   const entry = ctx.session.takeItem(canonicalItemKey(item));
-  if (!entry || !entry.raw.startsWith(bullet)) return null;
+  if (!entry) return null;
 
-  const body = indent ? indentLines(entry.raw, indent) : entry.raw;
+  const bare = stripIndent(entry.raw, leadingSpace(entry.raw));
+  if (!bare.startsWith(bullet)) return null;
+
+  const body = indent ? indentLines(bare, indent) : bare;
   return body + (entry.sep.includes("\n") ? entry.sep : "\n");
+}
+
+/** Longest run of spaces (never tabs) at the very start of the text. */
+function leadingSpace(text: string): string {
+  return /^ */.exec(text)?.[0] ?? "";
+}
+
+/** Remove `indent` from the front of every line that carries it. */
+function stripIndent(text: string, indent: string): string {
+  if (!indent) return text;
+  return text
+    .split("\n")
+    .map((line) => (line.startsWith(indent) ? line.slice(indent.length) : line))
+    .join("\n");
+}
+
+/**
+ * The bullet character to use for a whole unordered list.
+ *
+ * `*` and `+` are valid bullets and this serializer's canonical form is `-`, so
+ * rebuilding a `*` list rewrote every line of it — including the items the user
+ * never touched. The list's own source decides instead, falling back to the
+ * habit of the rest of the file when every item in this list has been edited.
+ *
+ * One marker for the entire list, not per item: CommonMark starts a *new list*
+ * where the marker changes, so a list that came out half `*` and half `-` would
+ * silently become two lists.
+ */
+function bulletMarkerFor(items: JSONContent[], ctx: SerializeContext): string {
+  const fallback = ctx.style?.bullet ?? "-";
+  if (!ctx.session) return fallback;
+  for (const item of items) {
+    const entry = ctx.session.peekItem(canonicalItemKey(item));
+    if (!entry) continue;
+    const marker = entry.raw[leadingSpace(entry.raw).length];
+    if (marker === "*" || marker === "+" || marker === "-") return marker;
+  }
+  return fallback;
+}
+
+/**
+ * Whether this list has a blank line between its items.
+ *
+ * Read from any item whose source is still recognisable — the edited one is
+ * not, but its siblings are, and looseness belongs to the list rather than to
+ * any single item. A list with no surviving source is assumed tight, which is
+ * what a freshly typed list looks like.
+ */
+function isLooseList(items: JSONContent[], ctx: SerializeContext): boolean {
+  if (!ctx.session) return false;
+  for (const item of items) {
+    const entry = ctx.session.peekItem(canonicalItemKey(item));
+    if (entry) return /\n[ \t]*\n/.test(entry.sep);
+  }
+  return false;
 }
 
 // ─── Public API ─────────────────────────────────────────────────────────────
@@ -364,6 +541,7 @@ export function docToMarkdown(
   const ctx: SerializeContext = {
     wrap: source ? source.wrapWidth : 0,
     session,
+    style: source ? source.style : undefined,
   };
 
   const parts: string[] = [];

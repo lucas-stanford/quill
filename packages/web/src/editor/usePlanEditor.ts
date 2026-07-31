@@ -1,7 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useEditor } from "@tiptap/react";
 import type { Editor, JSONContent } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
 import {
   alignSource,
   docToMarkdown,
@@ -9,6 +8,7 @@ import {
   parseMarkdown,
 } from "../markdown";
 import type { SourceMap } from "../markdown";
+import { editorExtensions } from "./extensions";
 import "./editor.css";
 
 export interface UsePlanEditorOptions {
@@ -58,7 +58,7 @@ export function usePlanEditor({
 
   const editor = useEditor(
     {
-      extensions: [StarterKit],
+      extensions: editorExtensions,
       content: initialRef.current,
       immediatelyRender: false,
       editable: true,

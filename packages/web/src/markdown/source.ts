@@ -59,6 +59,29 @@ export type SourceRecord = Omit<SourceEntry, "seq">;
 /** Used when the source gives no evidence of a prevailing wrap width. */
 export const DEFAULT_WRAP_WIDTH = 88;
 
+/**
+ * The formatting conventions a file was written with.
+ *
+ * A rebuilt block has to be written in *some* style, and the only style that
+ * does not show up as drift in the diff is the one the rest of the file already
+ * uses. These are inferred once at parse time and applied to every block this
+ * serializer has to rebuild.
+ */
+export interface PlanStyle {
+  /** Column to wrap prose at. */
+  wrapWidth: number;
+  /** Bullet character for unordered lists: "-", "*" or "+". */
+  bullet: string;
+  /** Columns a nested list is indented by, per level. */
+  nestIndent: number;
+}
+
+export const DEFAULT_STYLE: PlanStyle = {
+  wrapWidth: DEFAULT_WRAP_WIDTH,
+  bullet: "-",
+  nestIndent: 2,
+};
+
 const MIN_WRAP_WIDTH = 40;
 const MAX_WRAP_WIDTH = 200;
 
@@ -110,19 +133,40 @@ export class SourceSession {
   takeItem(key: string): SourceEntry | undefined {
     return takeEntry(this.items, this.itemCursors, key);
   }
+
+  /**
+   * Look at a list item's source without consuming it.
+   *
+   * Used to read a property of the original text — its bullet character — for
+   * an item that may still be rebuilt afterwards. Peeking must not advance the
+   * cursor, or a later `takeItem` for the same key would be handed the wrong
+   * copy of a repeated item.
+   */
+  peekItem(key: string): SourceEntry | undefined {
+    if (!key) return undefined;
+    const list = this.items.get(key);
+    if (!list || list.length === 0) return undefined;
+    const seen = this.itemCursors.get(key) ?? 0;
+    return list[Math.min(seen, list.length - 1)];
+  }
 }
 
 /** Immutable record of a parsed document's original formatting. */
 export class SourceMap {
-  /** Wrap width to use for blocks that must be re-serialized. */
-  readonly wrapWidth: number;
+  /** Conventions to write any block that has to be rebuilt in. */
+  readonly style: PlanStyle;
 
   private readonly blocks: Bucket = new Map();
   private readonly items: Bucket = new Map();
   private nextSeq = 0;
 
-  constructor(wrapWidth: number = DEFAULT_WRAP_WIDTH) {
-    this.wrapWidth = wrapWidth;
+  constructor(style: Partial<PlanStyle> = {}) {
+    this.style = { ...DEFAULT_STYLE, ...style };
+  }
+
+  /** Wrap width to use for blocks that must be re-serialized. */
+  get wrapWidth(): number {
+    return this.style.wrapWidth;
   }
 
   addBlock(key: string, record: SourceRecord): void {

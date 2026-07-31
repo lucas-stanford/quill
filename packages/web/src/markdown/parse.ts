@@ -10,6 +10,20 @@
  * list item into a `SourceMap`. Soft wraps carry no meaning, so the tree alone
  * can never reproduce them; keeping the source is the only way a save can leave
  * untouched blocks byte-identical. See `source.ts` for how entries are keyed.
+ *
+ * ── Nothing is dropped ──────────────────────────────────────────────────────
+ *
+ * A token this parser has no node for used to produce no node at all. That is
+ * not a rendering gap, it is data loss: the construct leaves the document, and
+ * the autosave a second later writes the document back over the user's file
+ * without it. GFM tables were the loud case — a whole table, gone from disk on
+ * the first keystroke anywhere in the plan.
+ *
+ * So every token now produces something. Tables become table nodes. Anything
+ * still unmodelled — an HTML block, a link reference definition, an inline tag,
+ * an image — becomes its own literal source text, which both keeps it visible
+ * and registers it in the source map, so an untouched one is re-emitted
+ * byte-for-byte and an edited one degrades to text rather than vanishing.
  */
 
 import { marked } from "marked";
@@ -17,6 +31,7 @@ import type { Token as MarkedToken, Tokens } from "marked";
 import type { JSONContent } from "@tiptap/react";
 import { SourceMap, detectWrapWidth } from "./source";
 import { canonicalKey, canonicalItemKey } from "./serialize";
+import { normalizeAlign } from "./table";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -25,34 +40,50 @@ type AnyToken = MarkedToken;
 
 // ─── Inline (leaf) parser ───────────────────────────────────────────────────
 
+/**
+ * Inline HTML tags this parser understands as marks.
+ *
+ * Deliberately only the tag the *serializer* emits. Every other tag is carried
+ * through as literal text, which keeps its bytes exactly; turning `<b>x</b>`
+ * into a bold mark would silently rewrite it as `**x**` the next time that
+ * paragraph was rebuilt.
+ */
+const HTML_MARK_TAGS: Record<string, string> = { "<u>": "underline" };
+const HTML_MARK_CLOSERS: Record<string, string> = { "</u>": "underline" };
+
 function parseInline(
   tokens: AnyToken[],
   inheritedMarks: MarkSpec[] = [],
 ): JSONContent[] {
   const result: JSONContent[] = [];
+  // Marks opened by an inline HTML tag, which applies to the siblings that
+  // follow it rather than to a subtree of its own.
+  const open: MarkSpec[] = [];
+  const marksHere = (): MarkSpec[] =>
+    open.length > 0 ? [...inheritedMarks, ...open] : inheritedMarks;
+
+  const closers = new Set(
+    tokens
+      .filter((t) => t.type === "html")
+      .map((t) => (t as Tokens.Tag).raw.trim().toLowerCase()),
+  );
 
   for (const token of tokens) {
     switch (token.type) {
       case "text": {
         const tok = token as Tokens.Text;
         if (tok.tokens && tok.tokens.length > 0) {
-          result.push(...parseInline(tok.tokens as AnyToken[], inheritedMarks));
+          result.push(...parseInline(tok.tokens as AnyToken[], marksHere()));
         } else {
           const text = tok.text.replace(/\n/g, " ");
-          if (text) {
-            const node: JSONContent = { type: "text", text };
-            if (inheritedMarks.length > 0) node.marks = inheritedMarks;
-            result.push(node);
-          }
+          if (text) result.push(withMarks({ type: "text", text }, marksHere()));
         }
         break;
       }
       case "escape": {
         const tok = token as Tokens.Escape;
         if (tok.text) {
-          const node: JSONContent = { type: "text", text: tok.text };
-          if (inheritedMarks.length > 0) node.marks = inheritedMarks;
-          result.push(node);
+          result.push(withMarks({ type: "text", text: tok.text }, marksHere()));
         }
         break;
       }
@@ -60,7 +91,7 @@ function parseInline(
         const tok = token as Tokens.Strong;
         result.push(
           ...parseInline(tok.tokens as AnyToken[], [
-            ...inheritedMarks,
+            ...marksHere(),
             { type: "bold" },
           ]),
         );
@@ -70,7 +101,7 @@ function parseInline(
         const tok = token as Tokens.Em;
         result.push(
           ...parseInline(tok.tokens as AnyToken[], [
-            ...inheritedMarks,
+            ...marksHere(),
             { type: "italic" },
           ]),
         );
@@ -80,7 +111,7 @@ function parseInline(
         const tok = token as Tokens.Del;
         result.push(
           ...parseInline(tok.tokens as AnyToken[], [
-            ...inheritedMarks,
+            ...marksHere(),
             { type: "strike" },
           ]),
         );
@@ -92,7 +123,7 @@ function parseInline(
           result.push({
             type: "text",
             text: tok.text,
-            marks: [...inheritedMarks, { type: "code" }],
+            marks: [...marksHere(), { type: "code" }],
           });
         }
         break;
@@ -104,10 +135,7 @@ function parseInline(
           attrs: { href: tok.href, title: tok.title ?? null },
         };
         result.push(
-          ...parseInline(tok.tokens as AnyToken[], [
-            ...inheritedMarks,
-            linkMark,
-          ]),
+          ...parseInline(tok.tokens as AnyToken[], [...marksHere(), linkMark]),
         );
         break;
       }
@@ -115,10 +143,64 @@ function parseInline(
         result.push({ type: "hardBreak" });
         break;
       }
+      case "image": {
+        // No image node exists in this schema, and a construct we cannot model
+        // must never simply disappear — that is how a plan loses content on the
+        // next autosave. An image is spelled as its own markdown instead: a "!"
+        // followed by link-marked text is exactly `![alt](src)`, so it survives
+        // a rebuild byte-for-byte and stays visible and clickable meanwhile.
+        const tok = token as Tokens.Image;
+        const alt = tok.text ?? "";
+        if (alt) {
+          result.push(withMarks({ type: "text", text: "!" }, marksHere()));
+          result.push(
+            withMarks({ type: "text", text: alt }, [
+              ...marksHere(),
+              {
+                type: "link",
+                attrs: { href: tok.href, title: tok.title ?? null },
+              },
+            ]),
+          );
+        } else if (tok.raw) {
+          // An empty alt leaves no text to carry the link mark, so the raw
+          // markdown is kept as literal text: visible, and never lost.
+          result.push(withMarks({ type: "text", text: tok.raw }, marksHere()));
+        }
+        break;
+      }
+      case "html": {
+        const raw = (token as Tokens.Tag).raw ?? "";
+        const tag = raw.trim().toLowerCase();
+
+        // `<u>` is the one tag we also emit, so it is read back as the mark it
+        // came from — otherwise pressing the underline key would survive a save
+        // and then be lost on the next load. Only when its closer is actually
+        // present; an unbalanced tag stays literal text.
+        const opens = HTML_MARK_TAGS[tag];
+        if (opens && closers.has(`</${tag.slice(1)}`)) {
+          open.push({ type: opens });
+          break;
+        }
+        const closes = HTML_MARK_CLOSERS[tag];
+        if (closes && open.length > 0 && open[open.length - 1].type === closes) {
+          open.pop();
+          break;
+        }
+
+        // Any other inline HTML the schema has no mark for. Kept as literal
+        // text so the tags round-trip untouched instead of being stripped.
+        if (raw) result.push(withMarks({ type: "text", text: raw }, marksHere()));
+        break;
+      }
     }
   }
 
   return result;
+}
+
+function withMarks(node: JSONContent, marks: MarkSpec[]): JSONContent {
+  return marks.length > 0 ? { ...node, marks } : node;
 }
 
 // ─── Block parser ───────────────────────────────────────────────────────────
@@ -180,10 +262,85 @@ function parseBlock(token: AnyToken): JSONContent[] {
         },
       ];
     }
+    case "table": {
+      const tok = token as Tokens.Table;
+      // GFM states alignment once, in the delimiter row. It is copied onto
+      // every cell of the column because that is where the node schema keeps
+      // it; the serializer folds it back to one marker per column.
+      const aligns = (tok.align ?? []).map(normalizeAlign);
+      const rows: JSONContent[] = [];
+
+      const header = (tok.header ?? []).map((cell, i) =>
+        parseTableCell("tableHeader", cell, aligns[i] ?? null),
+      );
+      if (header.length === 0) return preservedBlock(token);
+      rows.push({ type: "tableRow", content: header });
+
+      for (const row of tok.rows ?? []) {
+        rows.push({
+          type: "tableRow",
+          content: row.map((cell, i) =>
+            parseTableCell("tableCell", cell, aligns[i] ?? null),
+          ),
+        });
+      }
+
+      return [{ type: "table", content: rows }];
+    }
     case "space":
-    default:
       return [];
+    case "text": {
+      const tok = token as Tokens.Text;
+      const inlineToks = (tok.tokens ?? []) as AnyToken[];
+      if (inlineToks.length > 0) {
+        return [{ type: "paragraph", content: parseInline(inlineToks) }];
+      }
+      return preservedBlock(token);
+    }
+    default:
+      // Anything this schema cannot model — an HTML block, a link reference
+      // definition, a construct a future `marked` invents. Dropping it is the
+      // bug this lane exists to kill: the block would vanish from the document
+      // and the next autosave would erase it from the user's file. Kept as its
+      // own literal source instead, which also registers it in the source map
+      // so an untouched one is re-emitted byte-for-byte.
+      return preservedBlock(token);
   }
+}
+
+function parseTableCell(
+  type: "tableCell" | "tableHeader",
+  cell: Tokens.TableCell,
+  align: ReturnType<typeof normalizeAlign>,
+): JSONContent {
+  const resolved = align ?? normalizeAlign(cell.align);
+  const node: JSONContent = {
+    type,
+    content: [
+      { type: "paragraph", content: parseInline((cell.tokens ?? []) as AnyToken[]) },
+    ],
+  };
+  if (resolved) node.attrs = { align: resolved };
+  return node;
+}
+
+/**
+ * A block we have no node for, carried through as its own source text.
+ *
+ * Lines become hard breaks so the block keeps its shape on screen and, more
+ * importantly, so a rebuild cannot silently glue them into one line.
+ */
+function preservedBlock(token: AnyToken): JSONContent[] {
+  const raw = (token.raw ?? "").replace(/\n+$/, "");
+  if (!raw.trim()) return [];
+
+  const content: JSONContent[] = [];
+  const lines = raw.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    if (i > 0) content.push({ type: "hardBreak" });
+    if (lines[i]) content.push({ type: "text", text: lines[i] });
+  }
+  return [{ type: "paragraph", content }];
 }
 
 function parseListItem(item: Tokens.ListItem): JSONContent {
@@ -216,10 +373,9 @@ function parseListItem(item: Tokens.ListItem): JSONContent {
         });
         break;
       }
-      case "list":
-      case "blockquote":
-      case "code":
-      case "hr": {
+      default: {
+        // Lists, quotes, code, rules, tables — and anything unrecognised, which
+        // `parseBlock` preserves rather than drops.
         content.push(...parseBlock(token));
         break;
       }
@@ -259,7 +415,10 @@ export function parseMarkdown(markdown: string): ParsedPlan {
   }) as AnyToken[];
 
   const content: JSONContent[] = [];
-  const source = new SourceMap(detectWrapWidth(collectWrapSamples(tokens)));
+  const source = new SourceMap({
+    wrapWidth: detectWrapWidth(collectWrapSamples(tokens)),
+    ...detectListStyle(tokens),
+  });
 
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i];
@@ -367,6 +526,76 @@ function collectWrapSamples(tokens: AnyToken[]): string[] {
     }
   }
   return samples;
+}
+
+// ─── List style ─────────────────────────────────────────────────────────────
+
+/**
+ * How the author writes lists, so a rebuilt one does not announce itself.
+ *
+ * A serializer has to pick *some* bullet and *some* nesting width. Picking a
+ * fixed one means that the first edit anywhere in a list written the other way
+ * rewrites every line of it — an untouched-content diff, which is the drift
+ * invariant 2 exists to prevent. So the file's own habit is measured instead,
+ * the same way the wrap width already is.
+ */
+function detectListStyle(tokens: AnyToken[]): {
+  bullet: string;
+  nestIndent: number;
+} {
+  const bullets = new Map<string, number>();
+  const nests = new Map<number, number>();
+
+  const visit = (list: Tokens.List): void => {
+    for (const item of list.items) {
+      const marker = markerOf(item.raw);
+      if (!list.ordered && marker) {
+        bullets.set(marker.char, (bullets.get(marker.char) ?? 0) + 1);
+      }
+      for (const child of (item.tokens ?? []) as AnyToken[]) {
+        if (child.type !== "list") continue;
+        const inner = child as Tokens.List;
+        const first = inner.items[0];
+        if (first && marker) {
+          // marked dedents a nested item by the parent's marker width, so what
+          // is left in front of it is the extra the author typed.
+          const width = marker.width + leadingSpaces(first.raw);
+          nests.set(width, (nests.get(width) ?? 0) + 1);
+        }
+        visit(inner);
+      }
+    }
+  };
+
+  for (const token of tokens) if (token.type === "list") visit(token as Tokens.List);
+
+  return {
+    bullet: mostCommon(bullets) ?? "-",
+    nestIndent: mostCommon(nests) ?? 2,
+  };
+}
+
+function markerOf(raw: string): { char: string; width: number } | null {
+  const match = /^ *(?:([-*+])|\d{1,9}[.)]) +/.exec(raw);
+  if (!match) return null;
+  const bare = match[0].trimStart();
+  return { char: match[1] ?? "", width: bare.length };
+}
+
+function leadingSpaces(text: string): number {
+  return (/^ */.exec(text)?.[0] ?? "").length;
+}
+
+function mostCommon<T>(counts: Map<T, number>): T | undefined {
+  let best: T | undefined;
+  let bestCount = 0;
+  for (const [value, count] of counts) {
+    if (count > bestCount) {
+      best = value;
+      bestCount = count;
+    }
+  }
+  return best;
 }
 
 // ─── Alignment with the live editor ─────────────────────────────────────────

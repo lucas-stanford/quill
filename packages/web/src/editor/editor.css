@@ -183,3 +183,99 @@
   background: var(--color-selection, rgba(100, 160, 255, 0.3));
 }
 
+/* ── Tables ───────────────────────────────────────────────────────────────
+ *
+ * A GFM table has to read as a table on a near-black page, where a hairline
+ * that works on white disappears. Borders therefore use the same rule token as
+ * horizontal rules (defined for both themes), and the header row is lifted with
+ * the code-block surface — the one token that is reliably a step away from the
+ * page colour in dark *and* light.
+ *
+ * Both are wrapped in a table-specific custom property so the shell lane can
+ * introduce dedicated tokens later without this file changing. */
+
+.ProseMirror .tableWrapper {
+  /* Wide tables scroll instead of pushing the page out of its margins. */
+  overflow-x: auto;
+  margin: 1.1em 0;
+}
+
+.ProseMirror table {
+  border-collapse: collapse;
+  table-layout: auto;
+  width: 100%;
+  margin: 1.1em 0;
+  font-size: 0.95em;
+  line-height: 1.5;
+  /* The node view sets an inline min-width from the column count; on a narrow
+   * viewport that would overflow the page, and the wrapper scrolls instead. */
+  min-width: 0;
+}
+
+/* The wrapper already carries the block margin. */
+.ProseMirror .tableWrapper > table {
+  margin: 0;
+}
+
+.ProseMirror th,
+.ProseMirror td {
+  border: 1px solid var(--color-table-border, var(--color-rule, #38383c));
+  padding: 0.45em 0.7em;
+  vertical-align: top;
+  text-align: left;
+  /* Cells own their own box so a caret placed in one is never mispositioned. */
+  position: relative;
+  box-sizing: border-box;
+  min-width: 3em;
+}
+
+.ProseMirror th {
+  background: var(--color-table-header-bg, var(--color-code-bg, #1c1c1f));
+  color: var(--color-heading, #f0f0f0);
+  font-weight: 700;
+  /* The header's lower edge is the strongest line in the table, the way Word
+   * draws it — it is what makes the first row read as headings. */
+  border-bottom-width: 2px;
+}
+
+/* A cell holds full blocks; its first and last must not add outer space. */
+.ProseMirror th > :first-child,
+.ProseMirror td > :first-child {
+  margin-top: 0;
+}
+
+.ProseMirror th > :last-child,
+.ProseMirror td > :last-child {
+  margin-bottom: 0;
+}
+
+/* Column alignment arrives as an inline `text-align` on the cell; paragraphs
+ * inside it must inherit rather than reset to the left. */
+.ProseMirror th p,
+.ProseMirror td p {
+  text-align: inherit;
+}
+
+/* prosemirror-tables marks a cell selection with .selectedCell and expects the
+ * host to draw it. Without this, selecting cells looks like nothing happened. */
+.ProseMirror .selectedCell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--color-selection, rgba(74, 160, 224, 0.28));
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Only reachable if column resizing is ever turned on; styled so it would not
+ * appear as an unexplained black bar on a dark page. */
+.ProseMirror .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: -2px;
+  width: 4px;
+  background: var(--color-accent, #4fa3e0);
+  pointer-events: none;
+  z-index: 3;
+}
