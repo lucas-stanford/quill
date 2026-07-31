@@ -25,7 +25,12 @@ export default function App() {
   const [status, setStatus] = useState<LoadStatus>("loading");
   const [error, setError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
-  const [mode, setMode] = useState<EditorMode>("edit");
+  /**
+   * Review, not edit. Quill is a review surface first: opening a plan should
+   * present a clean page, never a toolbar you did not ask for. The ribbon
+   * appears only once the reviewer is actually editing.
+   */
+  const [mode, setMode] = useState<EditorMode>("review");
 
   const revisionRef = useRef("");
   const pendingRef = useRef<string | null>(null);

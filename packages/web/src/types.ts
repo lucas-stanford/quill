@@ -162,6 +162,12 @@ export type RevisionStatus = "idle" | "queued" | "working" | "done" | "failed" |
 /** POST /api/revision — asks for a revision. */
 export interface RevisionRequest {
   brief: RevisionBrief;
+  /**
+   * The rendered prompt. The browser formats it so there is exactly one
+   * prompt implementation in the product; the CLI sends it verbatim in
+   * detached mode rather than re-deriving it across a package boundary.
+   */
+  prompt: string;
 }
 
 /** GET /api/revision — poll for the outcome. */
