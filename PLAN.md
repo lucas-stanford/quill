@@ -52,7 +52,7 @@ starts work.
   ┌─────────────────────────┐        ┌──────────────────────┐
   │  quill  (node CLI)      │        │  PLAN.md             │  ← source of truth
   │  ├─ http server         │◄──────►│  PLAN.quill.json     │  ← comments, threads
-  │  ├─ ws live sync        │  watch └──────────────────────┘
+  │  ├─ sse live sync       │  watch └──────────────────────┘
   │  └─ agent bridge        │
   └───────────┬─────────────┘
               │  serves embedded SPA
