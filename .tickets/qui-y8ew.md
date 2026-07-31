@@ -1,7 +1,7 @@
 ---
 id: qui-y8ew
 status: in_progress
-deps: []
+deps: [qui-r1t9]
 links: []
 created: 2026-07-31T21:32:47Z
 type: feature

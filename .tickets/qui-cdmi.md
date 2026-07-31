@@ -1,9 +1,10 @@
 ---
 id: qui-cdmi
 status: closed
-deps: []
+deps: [qui-ycaz]
 links: []
 created: 2026-07-31T20:35:47Z
+parent: qui-ycaz
 type: chore
 priority: 3
 tags: [docs]

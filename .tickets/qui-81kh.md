@@ -1,12 +1,12 @@
 ---
 id: qui-81kh
 status: closed
-deps: []
+deps: [qui-r1t9]
 links: []
 created: 2026-07-31T20:44:43Z
 type: bug
 priority: 2
-parent: qui-79yv
+parent: qui-r1t9
 tags: [ui, lane]
 ---
 # Ribbon shows a wrong active state before first click

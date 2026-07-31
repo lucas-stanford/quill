@@ -1,7 +1,7 @@
 ---
 id: qui-57aa
 status: open
-deps: []
+deps: [qui-m1pf]
 links: []
 created: 2026-07-31T20:42:00Z
 type: task

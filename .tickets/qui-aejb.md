@@ -1,9 +1,10 @@
 ---
 id: qui-aejb
-status: in_progress
-deps: []
+status: closed
+deps: [qui-ycaz]
 links: []
 created: 2026-07-31T20:42:00Z
+parent: qui-0ull
 type: bug
 priority: 3
 tags: [cli, server]
@@ -20,3 +21,9 @@ If decoding is added it must happen before the containment check, never after, o
 
 Encoded-but-legitimate asset paths resolve, and traversal attempts are still refused.
 
+
+## Notes
+
+**2026-07-31T22:04:11Z**
+
+Fixed. Decoding now happens before the containment check, which is the load-bearing ordering: decoding after the check would let %2e%2e%2f collapse into ../ once validation had already passed. Malformed escapes return 400 instead of crashing, NUL bytes are refused, and the containment check uses the path separator so a sibling directory sharing the root's prefix cannot pass. Verified: legitimate percent-encoded asset names now resolve, and every traversal form tested still refuses.

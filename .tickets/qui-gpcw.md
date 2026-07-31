@@ -1,12 +1,12 @@
 ---
 id: qui-gpcw
 status: closed
-deps: []
+deps: [qui-u2o3]
 links: []
 created: 2026-07-31T20:44:43Z
 type: bug
 priority: 0
-parent: qui-79yv
+parent: qui-u2o3
 tags: [editor, lane]
 ---
 # One keystroke reflows the whole file

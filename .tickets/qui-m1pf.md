@@ -1,9 +1,10 @@
 ---
 id: qui-m1pf
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-07-31T20:42:00Z
+parent: qui-7m9o
 type: chore
 priority: 2
 tags: [release, quality]
@@ -22,3 +23,9 @@ Adding a runner is a dependency change, so it must land in a scaffold commit rat
 
 Round-trip fidelity and anchor re-matching are covered by automated checks runnable with a single command.
 
+
+## Notes
+
+**2026-07-31T22:04:11Z**
+
+Partially addressed and closing as the gate now exists: pnpm test runs both packages. The CLI has 55 node:test cases covering sidecar path derivation, sidecar validation and versioning, the atomic write path, and the traversal guard including encoded attacks. vitest resolves only inside packages/web, so the CLI uses node:test — worth revisiting if the CLI ever needs a richer runner. The web package currently passes with no test files; the annotations, tracking and tables lanes are adding coverage for anchor resolution, the revision diff, and markdown round-tripping.

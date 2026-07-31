@@ -1,7 +1,7 @@
 ---
 id: qui-ws0m
 status: in_progress
-deps: []
+deps: [qui-u2o3]
 links: []
 created: 2026-07-31T20:41:59Z
 type: task

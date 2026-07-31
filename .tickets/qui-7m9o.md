@@ -1,9 +1,10 @@
 ---
 id: qui-7m9o
 status: open
-deps: [qui-xbyx, qui-2gwn, qui-m1pf]
+deps: [qui-xbyx]
 links: []
 created: 2026-07-31T18:51:14Z
+parent: qui-kbjq
 type: milestone
 priority: 2
 tags: [milestone]

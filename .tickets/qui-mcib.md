@@ -1,7 +1,7 @@
 ---
 id: qui-mcib
 status: in_progress
-deps: [qui-7fd0]
+deps: [qui-7fd0, qui-y8ew]
 links: []
 created: 2026-07-31T20:41:59Z
 type: task

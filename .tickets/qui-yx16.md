@@ -1,7 +1,7 @@
 ---
 id: qui-yx16
 status: closed
-deps: []
+deps: [qui-8zqw]
 links: []
 created: 2026-07-31T20:36:51Z
 type: task

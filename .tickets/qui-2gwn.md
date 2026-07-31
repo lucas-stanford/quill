@@ -1,9 +1,10 @@
 ---
 id: qui-2gwn
 status: in_progress
-deps: []
+deps: [qui-u2o3]
 links: []
 created: 2026-07-31T20:35:47Z
+parent: qui-0ull
 type: bug
 priority: 2
 tags: [editor]

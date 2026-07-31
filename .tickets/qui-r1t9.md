@@ -1,7 +1,7 @@
 ---
 id: qui-r1t9
 status: closed
-deps: []
+deps: [qui-af7f]
 links: []
 created: 2026-07-31T20:36:51Z
 type: task
