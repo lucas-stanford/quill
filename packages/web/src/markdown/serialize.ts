@@ -23,11 +23,16 @@
  *   - Headings always use ATX style ("## Heading"), never setext.
  *   - Ordered-list indices use the node's `start` attribute.
  *   - Code-block content strips one trailing "\n" if present (marked adds one).
+ *   - Tables are re-emitted column-aligned, with one alignment marker per
+ *     column and every cell pipe escaped. An untouched table never reaches
+ *     this path, so hand-aligned tables keep their own spacing.
  *   - The document ends with exactly one trailing newline.
  */
 
 import type { JSONContent } from "@tiptap/react";
 import type { SourceEntry, SourceMap, SourceSession } from "./source";
+import type { ColumnAlign } from "./table";
+import { escapeCellText, normalizeAlign, renderGfmTable } from "./table";
 import { wrapMarkdown } from "./wrap";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -250,6 +255,12 @@ function serializeNode(
     case "horizontalRule":
       return `${indent}---\n\n`;
 
+    case "table": {
+      const body = renderGfmTable(tableRows(node), tableAligns(node));
+      if (!body) return "";
+      return `${indent ? indentLines(body, indent) : body}\n\n`;
+    }
+
     case "bulletList": {
       const items = children
         .map((item) => serializeListItem(item, "-", indent, ctx))
@@ -276,6 +287,77 @@ function indentLines(text: string, indent: string): string {
     .split("\n")
     .map((l) => (l ? indent + l : l))
     .join("\n");
+}
+
+// ─── Tables ─────────────────────────────────────────────────────────────────
+
+/**
+ * Cell text for one row, with merged cells expanded back into columns.
+ *
+ * GFM cannot express a colspan, so a merged cell is emitted in its first column
+ * followed by empty ones. That loses the merge and keeps the text — the right
+ * way round, since a table the user never merged is unaffected and a merged one
+ * degrades instead of dropping its content.
+ */
+function tableRowCells(row: JSONContent): string[] {
+  const cells: string[] = [];
+  for (const cell of row.content ?? []) {
+    cells.push(tableCellText(cell));
+    for (let i = 1; i < cellSpan(cell); i++) cells.push("");
+  }
+  return cells;
+}
+
+function cellSpan(cell: JSONContent): number {
+  const span = Number(cell.attrs?.colspan ?? 1);
+  return Number.isFinite(span) && span > 1 ? Math.floor(span) : 1;
+}
+
+/**
+ * A cell's blocks flattened to one line of inline markdown.
+ *
+ * Cell content is always canonical: never wrapped, because a newline would end
+ * the row, and never re-indented, because a cell has no column of its own.
+ */
+function tableCellText(cell: JSONContent): string {
+  const parts: string[] = [];
+  for (const child of cell.content ?? []) {
+    const text =
+      child.type === "paragraph"
+        ? serializeInline(child.content)
+        : serializeNode(child, "", CANONICAL).trim();
+    if (text) parts.push(text);
+  }
+  return escapeCellText(parts.join(" "));
+}
+
+/**
+ * One alignment per column, headers first.
+ *
+ * The schema stores alignment per cell, GFM stores it once per column, so the
+ * first cell that states an alignment wins. Rows are visited in document order
+ * and the header row is first, which makes the header the authority whenever it
+ * has an opinion — matching what the delimiter row meant on the way in.
+ */
+function tableAligns(node: JSONContent): ColumnAlign[] {
+  const aligns: ColumnAlign[] = [];
+  for (const row of node.content ?? []) {
+    let column = 0;
+    for (const cell of row.content ?? []) {
+      const align = normalizeAlign(cell.attrs?.align);
+      const span = cellSpan(cell);
+      for (let i = 0; i < span; i++, column++) {
+        if (align && !aligns[column]) aligns[column] = align;
+      }
+    }
+  }
+  return aligns;
+}
+
+function tableRows(node: JSONContent): string[][] {
+  return (node.content ?? [])
+    .filter((row) => row.type === "tableRow")
+    .map(tableRowCells);
 }
 
 function serializeListItem(
