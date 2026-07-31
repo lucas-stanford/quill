@@ -174,32 +174,26 @@ describe("validateRevisionBrief", () => {
 });
 
 describe("validateRevisionRequest", () => {
-  it("accepts { brief }", () => {
-    const result = validateRevisionRequest({ brief: { markdown: "# Plan\n" } });
-    assert.equal(result.ok, true);
-    assert.equal(result.brief.markdown, "# Plan\n");
-    assert.equal(result.prompt, undefined);
-  });
-
-  it("keeps the browser's rendered prompt verbatim", () => {
+  it("accepts { brief, prompt } and keeps the prompt verbatim", () => {
     const prompt = 'Revise this.\n\n"quoted" `backtick` $(whoami)\n';
     const result = validateRevisionRequest({ brief: { markdown: "# Plan\n" }, prompt });
     assert.equal(result.ok, true);
+    assert.equal(result.brief.markdown, "# Plan\n");
     assert.equal(result.prompt, prompt);
   });
 
-  it("treats a blank or missing prompt as absent, so the CLI renders its own", () => {
-    for (const prompt of [undefined, null, "", "   \n"]) {
-      const result = validateRevisionRequest({ brief: { markdown: "# Plan\n" }, prompt });
-      assert.equal(result.ok, true, JSON.stringify(prompt));
-      assert.equal(result.prompt, undefined, JSON.stringify(prompt));
-    }
+  it("requires the prompt — the CLI has no formatter to fall back on", () => {
+    const result = validateRevisionRequest({ brief: { markdown: "# Plan\n" } });
+    assert.equal(result.ok, false);
+    assert.match(result.reason, /body\.prompt is missing/);
   });
 
-  it("rejects a non-string prompt", () => {
-    const result = validateRevisionRequest({ brief: { markdown: "# Plan\n" }, prompt: 42 });
-    assert.equal(result.ok, false);
-    assert.match(result.reason, /body\.prompt must be a string/);
+  it("rejects a blank or non-string prompt", () => {
+    for (const prompt of ["", "   \n", 42, [], {}, null]) {
+      const result = validateRevisionRequest({ brief: { markdown: "# Plan\n" }, prompt });
+      assert.equal(result.ok, false, JSON.stringify(prompt));
+      assert.match(result.reason, /body\.prompt/);
+    }
   });
 
   it("rejects anything else", () => {

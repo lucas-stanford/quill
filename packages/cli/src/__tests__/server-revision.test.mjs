@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { startServer } from "../server.js";
 import { hashContent } from "../hash.js";
 import { QUILL_DIR, REQUEST_FILENAME, RESPONSE_FILENAME } from "../revision-protocol.js";
-import { FAKE_COPILOT, brief, makeWorkspace, removeWorkspace, waitFor } from "./helpers.mjs";
+import { FAKE_COPILOT, PROMPT, brief, makeWorkspace, removeWorkspace, waitFor } from "./helpers.mjs";
 
 const PLAN = "# Plan\n\nShip the thing on Friday.\n";
 const quiet = { log: () => {}, error: () => {} };
@@ -81,7 +81,7 @@ function rawGet(port, path) {
   });
 }
 
-const postRevision = (api, body = { brief: brief() }) =>
+const postRevision = (api, body = { brief: brief(), prompt: PROMPT }) =>
   api("/api/revision", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -146,11 +146,19 @@ describe("POST /api/revision — attached", () => {
 
     const noBrief = await postRevision(api, { markdown: "# Plan\n" });
     assert.equal(noBrief.status, 400);
-    assert.match(noBrief.json.error, /Body must be \{ brief: RevisionBrief/);
+    assert.match(noBrief.json.error, /Body must be \{ brief: RevisionBrief, prompt: string \}/);
+
+    const noPrompt = await postRevision(api, { brief: brief() });
+    assert.equal(noPrompt.status, 400);
+    assert.match(noPrompt.json.error, /body\.prompt is missing/);
 
     const badPrompt = await postRevision(api, { brief: brief(), prompt: 42 });
     assert.equal(badPrompt.status, 400);
     assert.match(badPrompt.json.error, /body\.prompt must be a string/);
+
+    const blankPrompt = await postRevision(api, { brief: brief(), prompt: "   \n" });
+    assert.equal(blankPrompt.status, 400);
+    assert.match(blankPrompt.json.error, /body\.prompt must not be empty/);
 
     const badField = await postRevision(api, { brief: { markdown: 3 } });
     assert.equal(badField.status, 400);

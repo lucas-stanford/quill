@@ -55,3 +55,10 @@ export function brief(overrides = {}) {
     ...overrides,
   };
 }
+
+/**
+ * A stand-in for what `formatBriefPrompt` renders in the browser. The CLI never
+ * builds one of these — it only passes it through — so the tests supply it the
+ * same way a browser does.
+ */
+export const PROMPT = "Revise the plan below, applying the reviewer's edits.\n";

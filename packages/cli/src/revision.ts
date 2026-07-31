@@ -12,6 +12,12 @@
  * **Detached** — nobody is listening, so quill runs `copilot -p <prompt>` itself
  * and treats stdout as the revised markdown.
  *
+ * The prompt is rendered by the browser (`formatBriefPrompt` in the web package)
+ * and arrives with the request. Quill passes it through untouched in both modes
+ * — to `copilot` in detached mode, into the queue file in attached mode. There
+ * is deliberately no prompt formatter on this side of the wire: a second one
+ * would drift from the first.
+ *
  * Two rules hold in both modes:
  *
  *  1. **The revised text is never written to the plan by quill.** It comes back
@@ -32,7 +38,6 @@ import { mkdir, readFile, rm } from "node:fs/promises";
 import { basename } from "node:path";
 import type { RevisionBrief, RevisionState } from "./types.js";
 import { writeFileAtomic } from "./atomic.js";
-import { buildRevisionPrompt } from "./agent-prompt.js";
 import {
   QUILL_DIR,
   REQUEST_FILENAME,
@@ -187,7 +192,7 @@ export class RevisionManager {
   }
 
   /** `POST /api/revision`. One revision at a time; a second is refused, not raced. */
-  async start(brief: RevisionBrief, prompt?: string): Promise<StartResult> {
+  async start(brief: RevisionBrief, prompt: string): Promise<StartResult> {
     if (this.busy) {
       return {
         ok: false,
@@ -212,18 +217,13 @@ export class RevisionManager {
 
     this.#armTimeout(id);
 
-    // The browser renders the prompt so the product has exactly one prompt
-    // implementation; the CLI's own builder is the fallback for clients that
-    // send only a brief.
-    const renderedPrompt = prompt ?? buildRevisionPrompt(brief);
-
     if (this.mode === "attached") {
       const queued: QueuedRevisionFile = {
         id,
         planPath: this.planPath,
         brief,
         createdAt: new Date().toISOString(),
-        prompt: renderedPrompt,
+        prompt,
       };
       try {
         await mkdir(quillDirFor(this.planPath), { recursive: true });
@@ -248,7 +248,7 @@ export class RevisionManager {
         `quill: revision ${id} queued in ${QUILL_DIR}/${REQUEST_FILENAME} — waiting for the parent agent`,
       );
     } else {
-      this.#startDetached(id, renderedPrompt);
+      this.#startDetached(id, prompt);
     }
 
     return { ok: true, state: this.getState() };

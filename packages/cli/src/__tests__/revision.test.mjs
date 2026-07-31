@@ -7,7 +7,15 @@ import { join } from "node:path";
 
 import { RevisionManager, AGENT_COMMAND } from "../revision.js";
 import { QUILL_DIR, REQUEST_FILENAME, RESPONSE_FILENAME } from "../revision-protocol.js";
-import { FAKE_COPILOT, brief, isAlive, makeWorkspace, removeWorkspace, waitFor } from "./helpers.mjs";
+import {
+  FAKE_COPILOT,
+  PROMPT,
+  brief,
+  isAlive,
+  makeWorkspace,
+  removeWorkspace,
+  waitFor,
+} from "./helpers.mjs";
 
 const PLAN = "# Plan\n\nShip the thing on Friday.\n";
 const quiet = { log: () => {}, error: () => {} };
@@ -92,10 +100,10 @@ describe("RevisionManager — shared behaviour", () => {
     const { dir, planPath } = await workspace("single-flight");
     const manager = attached(planPath);
 
-    const first = await manager.start(brief());
+    const first = await manager.start(brief(), PROMPT);
     assert.equal(first.ok, true);
 
-    const second = await manager.start(brief({ instruction: "and again" }));
+    const second = await manager.start(brief({ instruction: "and again" }), PROMPT);
     assert.equal(second.ok, false);
     assert.equal(second.status, 409);
     assert.match(second.error, /already queued/);
@@ -113,11 +121,11 @@ describe("RevisionManager — shared behaviour", () => {
     const { dir, planPath } = await workspace("sequential");
     const manager = attached(planPath);
 
-    const first = await manager.start(brief());
+    const first = await manager.start(brief(), PROMPT);
     await respond(dir, { id: first.state.id, status: "done" });
     await settled(manager);
 
-    const second = await manager.start(brief());
+    const second = await manager.start(brief(), PROMPT);
     assert.equal(second.ok, true);
     assert.notEqual(second.state.id, first.state.id);
     await manager.cancel();
@@ -137,6 +145,7 @@ describe("RevisionManager — attached mode", () => {
         edits: [{ kind: "deletion", text: "stretch goal" }],
         instruction: "Tighten it.",
       }),
+      PROMPT,
     );
 
     assert.equal(started.ok, true);
@@ -160,7 +169,7 @@ describe("RevisionManager — attached mode", () => {
     assert.equal(queued.brief.edits[0].kind, "deletion");
     assert.equal(queued.brief.instruction, "Tighten it.");
     assert.ok(!Number.isNaN(Date.parse(queued.createdAt)));
-    assert.match(queued.prompt, /Tighten it\./);
+    assert.equal(queued.prompt, PROMPT);
 
     await manager.cancel();
   });
@@ -188,7 +197,7 @@ describe("RevisionManager — attached mode", () => {
       },
     });
 
-    await manager.start(brief());
+    await manager.start(brief(), PROMPT);
     assert.equal(spawned, 0);
     assert.equal(manager.getState().status, "queued");
     await manager.cancel();
@@ -197,7 +206,7 @@ describe("RevisionManager — attached mode", () => {
   it("completes when the parent writes a done response, handing back the plan on disk", async () => {
     const { dir, planPath } = await workspace("attached-done");
     const manager = attached(planPath);
-    const started = await manager.start(brief());
+    const started = await manager.start(brief(), PROMPT);
 
     // The parent rewrites the plan — this is what the M2 watcher broadcasts.
     const revised = "# Plan\n\nShip the thing next sprint.\n";
@@ -218,7 +227,7 @@ describe("RevisionManager — attached mode", () => {
   it("prefers markdown the parent supplied over re-reading the file", async () => {
     const { dir, planPath } = await workspace("attached-markdown");
     const manager = attached(planPath);
-    const started = await manager.start(brief());
+    const started = await manager.start(brief(), PROMPT);
 
     await respond(dir, { id: started.state.id, status: "done", markdown: "# From the agent\n" });
 
@@ -232,7 +241,7 @@ describe("RevisionManager — attached mode", () => {
   it("surfaces the parent's failure message to the reviewer", async () => {
     const { dir, planPath } = await workspace("attached-failed");
     const manager = attached(planPath);
-    const started = await manager.start(brief());
+    const started = await manager.start(brief(), PROMPT);
 
     await respond(dir, { id: started.state.id, status: "failed", error: "the model refused" });
 
@@ -245,7 +254,7 @@ describe("RevisionManager — attached mode", () => {
   it("still says something useful when the parent fails with no reason", async () => {
     const { dir, planPath } = await workspace("attached-failed-bare");
     const manager = attached(planPath);
-    const started = await manager.start(brief());
+    const started = await manager.start(brief(), PROMPT);
 
     await respond(dir, { id: started.state.id, status: "failed" });
 
@@ -257,7 +266,7 @@ describe("RevisionManager — attached mode", () => {
   it("treats a working response as a heartbeat, not a completion", async () => {
     const { dir, planPath } = await workspace("attached-heartbeat");
     const manager = attached(planPath, { timeoutMs: 250 });
-    const started = await manager.start(brief());
+    const started = await manager.start(brief(), PROMPT);
 
     await respond(dir, { id: started.state.id, status: "working" });
     await waitFor(() => manager.getState().status === "working", { what: "the working heartbeat" });
@@ -276,7 +285,7 @@ describe("RevisionManager — attached mode", () => {
   it("ignores a response for a revision that is not in flight", async () => {
     const { dir, planPath } = await workspace("attached-stale-id");
     const manager = attached(planPath);
-    const started = await manager.start(brief());
+    const started = await manager.start(brief(), PROMPT);
 
     await respond(dir, { id: "some-other-revision", status: "done" });
     await waitFor(() => !existsSync(responsePath(dir)), { what: "the stale reply to be consumed" });
@@ -290,7 +299,7 @@ describe("RevisionManager — attached mode", () => {
   it("waits out a half-written response instead of failing on it", async () => {
     const { dir, planPath } = await workspace("attached-partial");
     const manager = attached(planPath);
-    const started = await manager.start(brief());
+    const started = await manager.start(brief(), PROMPT);
 
     // A parent that redirects into the file gets caught mid-write.
     await mkdir(join(dir, QUILL_DIR), { recursive: true });
@@ -305,7 +314,7 @@ describe("RevisionManager — attached mode", () => {
   it("fails clearly when the same unreadable response persists", async () => {
     const { dir, planPath } = await workspace("attached-garbage");
     const manager = attached(planPath);
-    await manager.start(brief());
+    await manager.start(brief(), PROMPT);
 
     await mkdir(join(dir, QUILL_DIR), { recursive: true });
     await writeFile(responsePath(dir), "not json at all", "utf-8");
@@ -319,7 +328,7 @@ describe("RevisionManager — attached mode", () => {
   it("fails with instructions when no agent ever picks the request up", async () => {
     const { dir, planPath } = await workspace("attached-timeout");
     const manager = attached(planPath, { timeoutMs: 80 });
-    await manager.start(brief());
+    await manager.start(brief(), PROMPT);
 
     const state = await settled(manager);
     assert.equal(state.status, "failed");
@@ -333,7 +342,7 @@ describe("RevisionManager — attached mode", () => {
   it("withdraws the request on cancel — the file vanishing is the cancel signal", async () => {
     const { dir, planPath } = await workspace("attached-cancel");
     const manager = attached(planPath);
-    await manager.start(brief());
+    await manager.start(brief(), PROMPT);
     assert.equal(existsSync(requestPath(dir)), true);
 
     await manager.cancel();
@@ -345,7 +354,7 @@ describe("RevisionManager — attached mode", () => {
   it("clears back to idle when cancelling with nothing in flight", async () => {
     const { dir, planPath } = await workspace("attached-cancel-idle");
     const manager = attached(planPath);
-    const started = await manager.start(brief());
+    const started = await manager.start(brief(), PROMPT);
     await respond(dir, { id: started.state.id, status: "done" });
     await settled(manager);
 
@@ -356,7 +365,7 @@ describe("RevisionManager — attached mode", () => {
   it("accepts the same payload over PUT, for an agent that would rather curl", async () => {
     const { dir, planPath } = await workspace("attached-put");
     const manager = attached(planPath);
-    const started = await manager.start(brief());
+    const started = await manager.start(brief(), PROMPT);
 
     await writeFile(planPath, "# Plan\n\nCurled.\n", "utf-8");
     const submitted = await manager.submitAgentResponse({ id: started.state.id, status: "done" });
@@ -375,7 +384,7 @@ describe("RevisionManager — attached mode", () => {
     assert.equal(none.ok, false);
     assert.equal(none.status, 404);
 
-    const started = await manager.start(brief());
+    const started = await manager.start(brief(), PROMPT);
     const wrong = await manager.submitAgentResponse({ id: "not-the-one", status: "done" });
     assert.equal(wrong.ok, false);
     assert.equal(wrong.status, 409);
@@ -419,7 +428,7 @@ describe("RevisionManager — attached mode", () => {
   it("removes the queue file on a synchronous shutdown", async () => {
     const { dir, planPath } = await workspace("attached-shutdown");
     const manager = attached(planPath);
-    await manager.start(brief());
+    await manager.start(brief(), PROMPT);
 
     manager.shutdownSync();
     assert.equal(existsSync(requestPath(dir)), false);
@@ -431,7 +440,7 @@ describe("RevisionManager — detached mode", () => {
     const { dir, planPath } = await workspace("detached-done");
     const { manager, calls } = detached(planPath);
 
-    await manager.start(brief());
+    await manager.start(brief(), PROMPT);
     const state = await settled(manager);
 
     assert.equal(state.status, "done");
@@ -450,44 +459,40 @@ describe("RevisionManager — detached mode", () => {
   it("passes the prompt as one argv element, never through a shell", async () => {
     const { dir, planPath } = await workspace("detached-injection");
     const argvFile = join(dir, "argv.json");
-    const hostile = '"; touch /tmp/pwned; echo "$(whoami)" `id` \n\nsecond line\n';
+    // What a browser would render from hostile reviewer text: the prompt is the
+    // string that actually reaches argv, so it is the injection surface.
+    const hostile = `Revise this.\n\n"; touch ${join(dir, "pwned")}; echo "$(whoami)" \`id\` \n\nsecond line\n`;
 
     const { manager, calls } = detached(planPath, {
       env: { FAKE_COPILOT_ARGV_FILE: argvFile },
     });
 
-    await manager.start(brief({ markdown: `# Plan\n\n${hostile}`, instruction: hostile }));
+    await manager.start(brief({ markdown: `# Plan\n\n${hostile}` }), hostile);
     assert.equal((await settled(manager)).status, "done");
 
     const argv = JSON.parse(await readFile(argvFile, "utf-8"));
     assert.equal(argv.length, 2, "exactly two arguments: -p and the prompt");
     assert.equal(argv[0], "-p");
-    // The metacharacters survive verbatim, which is only possible if no shell
-    // ever parsed them.
-    assert.ok(argv[1].includes('"; touch /tmp/pwned; echo "$(whoami)" `id`'));
+    // Byte-for-byte, which is only possible if no shell ever parsed it.
+    assert.equal(argv[1], hostile);
     assert.ok(argv[1].includes("\n"));
     assert.equal(argv[1], calls[0].args[1]);
     // And nothing the injection asked for happened.
     assert.equal(existsSync(join(dir, "pwned")), false);
   });
 
-  it("sends the browser's prompt verbatim, and its own only when none is given", async () => {
+  it("sends the browser's prompt verbatim and renders nothing of its own", async () => {
     const { dir, planPath } = await workspace("detached-prompt");
     const argvFile = join(dir, "argv.json");
     const prompt = "Rewrite the plan.\n\nNothing else.\n";
 
     const { manager } = detached(planPath, { env: { FAKE_COPILOT_ARGV_FILE: argvFile } });
 
-    await manager.start(brief(), prompt);
+    // The brief says one thing and the prompt says another: what reaches the
+    // model is the prompt, untouched. There is no formatter on this side.
+    await manager.start(brief({ instruction: "Tighten section 3." }), prompt);
     assert.equal((await settled(manager)).status, "done");
     assert.deepEqual(JSON.parse(await readFile(argvFile, "utf-8")), ["-p", prompt]);
-
-    // No prompt from the client: the CLI renders one rather than sending nothing.
-    await manager.start(brief({ instruction: "Tighten section 3." }));
-    assert.equal((await settled(manager)).status, "done");
-    const fallback = JSON.parse(await readFile(argvFile, "utf-8"));
-    assert.equal(fallback[0], "-p");
-    assert.match(fallback[1], /Tighten section 3\./);
   });
 
   it("names the missing CLI instead of hanging or throwing a stack trace", async () => {
@@ -499,7 +504,7 @@ describe("RevisionManager — detached mode", () => {
       spawnFn: (_command, args, options) => spawn(join(dir, "no-such-copilot"), args, options),
     });
 
-    await manager.start(brief());
+    await manager.start(brief(), PROMPT);
     const state = await settled(manager);
 
     assert.equal(state.status, "failed");
@@ -512,7 +517,7 @@ describe("RevisionManager — detached mode", () => {
     const { planPath } = await workspace("detached-exit");
     const { manager } = detached(planPath, { env: { FAKE_COPILOT_MODE: "fail" } });
 
-    await manager.start(brief());
+    await manager.start(brief(), PROMPT);
     const state = await settled(manager);
 
     assert.equal(state.status, "failed");
@@ -524,7 +529,7 @@ describe("RevisionManager — detached mode", () => {
     const { planPath } = await workspace("detached-empty");
     const { manager } = detached(planPath, { env: { FAKE_COPILOT_MODE: "empty" } });
 
-    await manager.start(brief());
+    await manager.start(brief(), PROMPT);
     const state = await settled(manager);
 
     assert.equal(state.status, "failed");
@@ -535,7 +540,7 @@ describe("RevisionManager — detached mode", () => {
     const { planPath } = await workspace("detached-blank");
     const { manager } = detached(planPath, { env: { FAKE_COPILOT_OUTPUT: "   \n\n  \n" } });
 
-    await manager.start(brief());
+    await manager.start(brief(), PROMPT);
     assert.match((await settled(manager)).error, /printed nothing/);
   });
 
@@ -545,7 +550,7 @@ describe("RevisionManager — detached mode", () => {
       env: { FAKE_COPILOT_OUTPUT: "\uFEFF# Plan\n\nRevised.\n\n\n   " },
     });
 
-    await manager.start(brief());
+    await manager.start(brief(), PROMPT);
     assert.equal((await settled(manager)).markdown, "# Plan\n\nRevised.\n");
   });
 
@@ -556,7 +561,7 @@ describe("RevisionManager — detached mode", () => {
       env: { FAKE_COPILOT_MODE: "hang", FAKE_COPILOT_PID_FILE: pidFile },
     });
 
-    await manager.start(brief());
+    await manager.start(brief(), PROMPT);
     await waitFor(() => manager.getState().status === "working", { what: "the child to start" });
 
     await manager.cancel();
@@ -569,7 +574,7 @@ describe("RevisionManager — detached mode", () => {
       env: { FAKE_COPILOT_MODE: "hang", FAKE_COPILOT_PID_FILE: pidFile },
     });
 
-    await manager.start(brief());
+    await manager.start(brief(), PROMPT);
     const pid = Number(
       await waitFor(() => (existsSync(pidFile) ? readFileSync(pidFile, "utf-8") : null), {
         what: "the agent to report its pid",
@@ -591,7 +596,7 @@ describe("RevisionManager — detached mode", () => {
       env: { FAKE_COPILOT_MODE: "hang", FAKE_COPILOT_PID_FILE: pidFile },
     });
 
-    await manager.start(brief());
+    await manager.start(brief(), PROMPT);
     const pid = Number(
       await waitFor(() => (existsSync(pidFile) ? readFileSync(pidFile, "utf-8") : null), {
         what: "the agent to report its pid",
@@ -612,7 +617,7 @@ describe("RevisionManager — detached mode", () => {
       env: { FAKE_COPILOT_MODE: "hang", FAKE_COPILOT_PID_FILE: pidFile },
     });
 
-    await manager.start(brief());
+    await manager.start(brief(), PROMPT);
     const pid = Number(
       await waitFor(() => (existsSync(pidFile) ? readFileSync(pidFile, "utf-8") : null), {
         what: "the agent to report its pid",
@@ -627,7 +632,7 @@ describe("RevisionManager — detached mode", () => {
     const { planPath } = await workspace("detached-put");
     const { manager } = detached(planPath, { env: { FAKE_COPILOT_MODE: "hang" } });
 
-    await manager.start(brief());
+    await manager.start(brief(), PROMPT);
     const submitted = await manager.submitAgentResponse({
       id: manager.getState().id,
       status: "done",
@@ -644,7 +649,7 @@ describe("RevisionManager — detached mode", () => {
     const { dir, planPath } = await workspace("detached-no-queue");
     const { manager } = detached(planPath);
 
-    await manager.start(brief());
+    await manager.start(brief(), PROMPT);
     await settled(manager);
 
     assert.equal(existsSync(join(dir, QUILL_DIR)), false);

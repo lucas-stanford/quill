@@ -45,13 +45,16 @@ export function revisionResponsePathFor(planPath: string): string {
 }
 
 /**
- * The queue file: exactly a `QueuedRevision` plus the rendered `prompt`.
+ * The queue file: exactly a `QueuedRevision` (frozen in types.ts) plus the
+ * rendered `prompt` the browser sent.
  *
- * The extra key is additive — a parent that only knows `QueuedRevision` reads
- * the file unchanged — and it saves a shell-scripted agent from having to
- * render a prompt out of the structured brief itself.
+ * The extra key is additive — a parent written against `QueuedRevision` alone
+ * reads the file unchanged — and it saves a shell-scripted agent from having to
+ * turn the structured brief into English itself.
  */
-export type QueuedRevisionFile = QueuedRevision & { prompt?: string };
+export interface QueuedRevisionFile extends QueuedRevision {
+  prompt: string;
+}
 
 /** Pretty-printed with a trailing newline: a human and `jq` both have to read it. */
 export function serializeQueuedRevision(queued: QueuedRevisionFile): string {
@@ -188,36 +191,40 @@ export function validateRevisionBrief(value: unknown, where = "brief"): BriefRes
 }
 
 export type RevisionRequestResult =
-  | { ok: true; brief: RevisionBrief; prompt?: string }
+  | { ok: true; brief: RevisionBrief; prompt: string }
   | { ok: false; reason: string };
 
 /**
- * Validates a `POST /api/revision` body: `{ brief: RevisionBrief; prompt?: string }`.
+ * Validates a `POST /api/revision` body: `{ brief: RevisionBrief; prompt: string }`.
  *
- * The browser renders the prompt — there is one prompt implementation in the
- * product and it lives in the web package — and the CLI sends it verbatim.
- * `prompt` is accepted rather than required so that a shell-scripted client
- * (or a curl by hand) still works; without one the CLI renders its own from
- * the brief. A blank prompt is treated as absent: sending a model an empty
- * instruction is never what the caller meant.
+ * Both are required. The browser renders the prompt (`formatBriefPrompt` in the
+ * web package) so the product has exactly one prompt implementation; the CLI
+ * sends it verbatim and never re-derives it — a second formatter here is the
+ * drift this contract exists to prevent. A blank prompt is refused rather than
+ * silently patched over: sending a model an empty instruction is never what the
+ * caller meant, and a 400 says so at the point the mistake was made.
  */
 export function validateRevisionRequest(value: unknown): RevisionRequestResult {
+  const shape = "Body must be { brief: RevisionBrief, prompt: string }";
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return { ok: false, reason: "Body must be { brief: RevisionBrief, prompt?: string }" };
+    return { ok: false, reason: shape };
   }
   const raw = value as Record<string, unknown>;
-  if (raw.brief === undefined) {
-    return { ok: false, reason: "Body must be { brief: RevisionBrief, prompt?: string }" };
-  }
+  if (raw.brief === undefined) return { ok: false, reason: shape };
 
   const brief = validateRevisionBrief(raw.brief, "body.brief");
   if (!brief.ok) return brief;
 
-  if (raw.prompt === undefined || raw.prompt === null) return { ok: true, brief: brief.brief };
-  if (typeof raw.prompt !== "string") return { ok: false, reason: "body.prompt must be a string" };
-  return raw.prompt.trim().length === 0
-    ? { ok: true, brief: brief.brief }
-    : { ok: true, brief: brief.brief, prompt: raw.prompt };
+  if (raw.prompt === undefined || raw.prompt === null) {
+    return { ok: false, reason: `${shape} — body.prompt is missing` };
+  }
+  if (typeof raw.prompt !== "string") {
+    return { ok: false, reason: "body.prompt must be a string" };
+  }
+  if (raw.prompt.trim().length === 0) {
+    return { ok: false, reason: "body.prompt must not be empty" };
+  }
+  return { ok: true, brief: brief.brief, prompt: raw.prompt };
 }
 
 /* ── The parent agent's reply ────────────────────────────────────────────── */
@@ -286,8 +293,15 @@ export function parseAgentResponse(raw: string): AgentResponseResult {
   return validateAgentResponse(value, RESPONSE_FILENAME);
 }
 
+/**
+ * A queue file as read back. `prompt` is optional here and required when
+ * writing: the sweep's job is to identify a stale file, not to validate it, and
+ * a file left by an older quill should still be recognizable enough to clear.
+ */
+export type ParsedQueuedRevision = QueuedRevision & { prompt?: string };
+
 export type QueuedRevisionResult =
-  | { ok: true; queued: QueuedRevisionFile }
+  | { ok: true; queued: ParsedQueuedRevision }
   | { ok: false; reason: string };
 
 /** Parses a queue file we wrote earlier — used to identify a stale one at startup. */
@@ -299,12 +313,12 @@ export function parseQueuedRevision(raw: string): QueuedRevisionResult {
     return { ok: false, reason: `not valid JSON — ${(err as Error).message}` };
   }
 
-  const result = collectShapeErrors<QueuedRevisionFile>(() => {
+  const result = collectShapeErrors<ParsedQueuedRevision>(() => {
     const where = REQUEST_FILENAME;
     const raw2 = requireRecord(value, where);
     const brief = validateRevisionBrief(raw2.brief, `${where}.brief`);
     if (!brief.ok) fail(brief.reason);
-    const queued: QueuedRevisionFile = {
+    const queued: ParsedQueuedRevision = {
       id: requireString(raw2.id, `${where}.id`),
       planPath: requireString(raw2.planPath, `${where}.planPath`),
       brief: brief.brief,

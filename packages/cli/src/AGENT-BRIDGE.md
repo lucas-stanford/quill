@@ -78,10 +78,10 @@ This is exactly the `QueuedRevision` type in `types.ts`, plus `prompt`. Every ke
 shown is always present; `brief.instruction` and `edits[].context` are the only
 optional ones. `comments` and `edits` are always arrays, possibly empty.
 
-`prompt` is the same brief already rendered as English — the exact text quill
-would send a model in detached mode. Use it if you drive a model directly
-(`copilot -p "$(jq -r .prompt .quill/revision-request.json)"`); ignore it and
-read the structured `brief` if you would rather decide for yourself. It is
+`prompt` is the same brief already rendered as English by the browser — the exact
+text quill would send a model in detached mode. Use it if you drive a model
+directly (`copilot -p "$(jq -r .prompt .quill/revision-request.json)"`); ignore
+it and read the structured `brief` if you would rather decide for yourself. It is
 additive: a parent written against `QueuedRevision` alone is unaffected.
 
 How to read the brief:
@@ -193,18 +193,20 @@ stdout is the revised markdown. It is returned in `RevisionState.markdown` and
 never written to disk. If `copilot` is not on `PATH`, exits non-zero, or prints
 nothing, the revision fails with a specific message instead of hanging.
 
-The prompt is rendered by the browser and sent with the request, so the product
-has exactly one prompt implementation. If a client sends only a `brief`, the CLI
-renders an equivalent prompt itself (`agent-prompt.ts`) rather than failing.
+The prompt is rendered by the browser (`formatBriefPrompt`) and sent with the
+request, so the product has exactly one prompt implementation. The CLI passes it
+through verbatim and has no formatter of its own; a request without a `prompt`
+is a `400`, not a prompt quill invents.
 
 ## 8. The HTTP surface
 
 | method   | path            | result                                                              |
 |----------|-----------------|---------------------------------------------------------------------|
-| `POST`   | `/api/revision` | `200 RevisionState` — body `{ "brief": RevisionBrief, "prompt"?: string }` |
+| `POST`   | `/api/revision` | `200 RevisionState` — body `{ "brief": RevisionBrief, "prompt": string }` |
 | `GET`    | `/api/revision` | `200 RevisionState`                                                  |
 | `PUT`    | `/api/revision` | `200 RevisionState` — attached-mode completion signal                |
 | `DELETE` | `/api/revision` | `204` — cancels, kills the child, clears the queue file              |
 
 `POST` while a revision is in flight is refused with `409` and the current state;
-one revision at a time, never two agents rewriting one plan.
+one revision at a time, never two agents rewriting one plan. A missing, blank or
+non-string `prompt` is refused with `400` and the offending field named.
