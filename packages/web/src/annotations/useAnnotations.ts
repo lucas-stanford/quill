@@ -4,6 +4,8 @@ import type { EditorView } from "@tiptap/pm/view";
 import type { Comment, CommentReply, Sidecar, TextAnchor } from "../types";
 import { fetchAnnotations, saveAnnotations } from "../api";
 import { buildDocText, trimRange } from "./docText";
+import { measureSelectionGeometry } from "./selectionGeometry";
+import type { SelectionGeometry } from "./selectionGeometry";
 import { createAnchor, prepareDocument, resolveAnchorIn } from "./anchor";
 import {
   anchorPluginKey,
@@ -176,6 +178,8 @@ export function useAnnotations({ editor, enabled }: UseAnnotationsOptions): Anno
   const [activeId, setActiveIdState] = useState<string | null>(null);
   const [draft, setDraft] = useState<DraftAnchor | null>(null);
   const [selectionQuote, setSelectionQuote] = useState("");
+  const [selectionKey, setSelectionKey] = useState("");
+  const [editorFocused, setEditorFocused] = useState(false);
   const [geometry, setGeometry] = useState(0);
   const [sync, setSync] = useState<SidecarSync>("idle");
   const [syncDetail, setSyncDetail] = useState<string | null>(null);
@@ -287,13 +291,21 @@ export function useAnnotations({ editor, enabled }: UseAnnotationsOptions): Anno
       const { from, to } = state.selection;
       const text = to > from ? state.doc.textBetween(from, to, " ", " ").trim() : "";
       setSelectionQuote((prev) => (prev === text ? prev : text));
+      const key = text ? `${from}:${to}` : "";
+      setSelectionKey((prev) => (prev === key ? prev : key));
     };
+    const onFocus = () => setEditorFocused(true);
+    const onBlur = () => setEditorFocused(false);
 
     editor.on("transaction", onTransaction);
     editor.on("selectionUpdate", onSelection);
+    editor.on("focus", onFocus);
+    editor.on("blur", onBlur);
     return () => {
       editor.off("transaction", onTransaction);
       editor.off("selectionUpdate", onSelection);
+      editor.off("focus", onFocus);
+      editor.off("blur", onBlur);
     };
   }, [editor, scheduleReanchor, bumpGeometry]);
 
@@ -573,6 +585,18 @@ export function useAnnotations({ editor, enabled }: UseAnnotationsOptions): Anno
     [editor, resolutions],
   );
 
+  const measureSelection = useCallback((): SelectionGeometry | null => {
+    const view = editor?.view;
+    if (!view || editor?.isDestroyed) return null;
+    return measureSelectionGeometry(view);
+  }, [editor]);
+
+  const focusDocument = useCallback(() => {
+    const view = editor?.view;
+    if (!view || editor?.isDestroyed) return;
+    view.focus();
+  }, [editor]);
+
   const measure = useCallback(
     (layer: HTMLElement): Map<string, number> => {
       const tops = new Map<string, number>();
@@ -648,6 +672,10 @@ export function useAnnotations({ editor, enabled }: UseAnnotationsOptions): Anno
     geometry,
     measure,
     selectionQuote,
+    selectionKey,
+    editorFocused,
+    measureSelection,
+    focusDocument,
     draft,
     beginDraft,
     cancelDraft,

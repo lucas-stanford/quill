@@ -13,6 +13,7 @@
  */
 
 import type { TextAnchor } from "../types";
+import type { SelectionGeometry } from "./selectionGeometry";
 import type { AnnotationsApi } from "./useAnnotations";
 
 export type SidecarSync = "idle" | "loading" | "saving" | "saved" | "unavailable" | "error";
@@ -36,6 +37,17 @@ export interface AnnotationsInternal {
   measure(layer: HTMLElement): Map<string, number>;
   /** Preview of the editor's current selection, "" when there is none. */
   selectionQuote: string;
+  /**
+   * Identity of the current selection ("" when collapsed), so the floating
+   * toolbar can scope a dismissal to the selection it was dismissed for.
+   */
+  selectionKey: string;
+  /** True while the document itself holds the selection. */
+  editorFocused: boolean;
+  /** Viewport-space rects of the current selection, for the floating toolbar. */
+  measureSelection(): SelectionGeometry | null;
+  /** Returns focus to the document without moving the selection. */
+  focusDocument(): void;
   /** The comment being composed, anchored the moment composing started. */
   draft: DraftAnchor | null;
   beginDraft(): boolean;

@@ -1,0 +1,117 @@
+/*
+ * annotations/selectionToolbar.css
+ *
+ * The floating control that hovers by the selected text. Rendered into a
+ * body-level portal (see SelectionToolbar.tsx), so it must carry its own
+ * stacking and its own surface rather than inheriting the rail's.
+ *
+ * Every colour is a design token. The fallbacks mirror annotations.css: they
+ * only apply if the token is missing, so nothing here is a hardcoded colour at
+ * a use site.
+ */
+
+.quill-selection-host {
+  /* A neutral hook for the portal; the toolbar itself does the positioning. */
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.quill-selection-toolbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  /*
+   * Above the title bar (z-index 3) and the ribbon overlay (z-index 2), which
+   * live in the root stacking context. The vertical clamp already keeps the
+   * toolbar out of that band; this is the second line of defence, and it also
+   * lifts the control clear of the comment rail and the page.
+   */
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--color-comment-border, #3f3f47);
+  border-radius: 7px;
+  background: var(--color-titlebar-bg, #1c1c1f);
+  box-shadow: 0 6px 20px var(--color-shadow, rgba(0, 0, 0, 0.55));
+  font-family: var(--font-chrome, system-ui, sans-serif);
+  white-space: nowrap;
+  /* Parked: measured but not yet placed, or its text has scrolled away. */
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 110ms ease, transform 110ms ease;
+  transform: translateY(2px);
+}
+
+.quill-selection-toolbar[data-placed] {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+/* The tail, pointing back at the words the toolbar is about. */
+.quill-selection-toolbar::after {
+  content: "";
+  position: absolute;
+  left: calc(50% - 4px);
+  width: 8px;
+  height: 8px;
+  background: var(--color-titlebar-bg, #1c1c1f);
+  border: 1px solid var(--color-comment-border, #3f3f47);
+  transform: rotate(45deg);
+}
+
+.quill-selection-toolbar[data-side="above"]::after {
+  bottom: -5px;
+  border-top: none;
+  border-left: none;
+}
+
+.quill-selection-toolbar[data-side="below"]::after {
+  top: -5px;
+  border-bottom: none;
+  border-right: none;
+}
+
+.quill-selection-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--color-text, #e6e6e6);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.quill-selection-button svg {
+  color: var(--color-accent, #4fa3e0);
+}
+
+.quill-selection-button:hover {
+  background: var(--color-control-hover, rgba(255, 255, 255, 0.07));
+}
+
+.quill-selection-button:active {
+  background: var(--color-control-active, rgba(74, 160, 224, 0.2));
+}
+
+.quill-selection-button:focus-visible {
+  outline: 2px solid var(--color-accent, #4fa3e0);
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quill-selection-toolbar {
+    transition: none;
+    transform: none;
+  }
+}
