@@ -11,6 +11,10 @@
  *   --color-inline-code-bg, --color-inline-code-text
  *   --color-titlebar-bg, --color-titlebar-border
  *   --color-control-hover, --color-control-active
+ *
+ * M3 review tokens (defined here, consumed by the annotations and tracking lanes):
+ *   --color-comment-bg, --color-comment-border, --color-comment-anchor
+ *   --color-insertion, --color-deletion, --color-change-ai, --color-change-human
  */
 
 :root {
@@ -54,6 +58,34 @@
   --color-error:           #ff6b6b;   /* save errors, load errors */
   --color-warning:         #f4c542;   /* stale-state indicator */
 
+  /* ── Review: comments (M3) ───────────────────────────────
+   * Cards sit on the canvas, not on the page, so they are lifted one step
+   * above BOTH surfaces to read as objects floating beside the sheet.
+   * The anchor is Word's soft highlight: an amber wash at low alpha that
+   * tints the text's background without glowing on a near-black page. */
+  --color-comment-bg:      #2b2b31;
+  --color-comment-border:  #3f3f47;
+  --color-comment-anchor:  rgba(244, 197, 66, 0.18);
+  /* The active/selected thread's anchor — same hue, one step stronger. */
+  --color-comment-anchor-active: rgba(244, 197, 66, 0.34);
+
+  /* ── Review: tracked changes (M3) ────────────────────────
+   * Two independent dimensions, so they are carried on two channels:
+   *   KIND   (insertion vs deletion) -> TYPOGRAPHY: underline vs strikethrough,
+   *          reinforced by these two hues and their background washes.
+   *   AUTHOR (human vs AI)           -> HUE on the mark itself.
+   * Colour alone cannot carry two dimensions legibly (and fails outright for
+   * colour-blind readers), so a consumer should always set the decoration for
+   * kind and may then tint by author. Green/red are conventional for
+   * insert/delete; violet reads as machine-authored against the blue that
+   * the rest of the chrome uses for the human. */
+  --color-insertion:       #6dd39b;   /* 8.9:1 on the page — legible as text */
+  --color-deletion:        #ff8f8f;   /* 7.4:1 on the page */
+  --color-insertion-bg:    rgba(109, 211, 155, 0.14);
+  --color-deletion-bg:     rgba(255, 143, 143, 0.14);
+  --color-change-ai:       #c39bf7;   /* violet — machine authorship */
+  --color-change-human:    #6ab4f5;   /* the chrome blue — human authorship */
+
   /* ── Page metrics ────────────────────────────────────────── */
   /* US Letter at 96 dpi — 816 × 1056 px; 1 in = 96 px */
   --page-width:       816px;
@@ -68,8 +100,28 @@
   /* ── Chrome metrics ─────────────────────────────────────── */
   --titlebar-height:    48px;
   --ribbon-height:      38px;
-  --canvas-pad-top:     36px;
+  /*
+   * Gap between the underside of the ribbon and the top edge of the page.
+   * The canvas reserves the ribbon band ON TOP of this at all times (see
+   * .page-canvas-inner) so canvas geometry is identical in both modes and
+   * the ribbon can slide over it without moving anything.
+   */
+  --canvas-pad-top:     28px;
   --canvas-pad-bottom:  64px;
+  --canvas-gutter:      24px;
+
+  /* ── Comment rail ───────────────────────────────────────
+   * Wide enough for a readable comment card (~40 characters).
+   * Breakpoints derived from these live in AppShell.css:
+   *   rail beside a centred page  >= 816 + 2*(24 + 300 + 24) = 1512px
+   *   rail beside the page at all >= 24 + 816 + 24 + 300 + 24 = 1188px
+   */
+  --rail-width:        300px;
+  --rail-gap:           24px;
+
+  /* ── Motion ─────────────────────────────────────────────── */
+  --ribbon-slide-duration: 200ms;
+  --ribbon-slide-ease:     cubic-bezier(0.22, 0.61, 0.36, 1);
 
   /* ── Typography for chrome (not editor content) ─────────── */
   --font-chrome:
@@ -111,6 +163,22 @@
 
   --color-error:           #a80000;
   --color-warning:         #a55600;
+
+  /* ── Review: comments (M3) ─────────────────────────────── */
+  /* White card on the warm grey canvas — Word's margin balloon. */
+  --color-comment-bg:      #ffffff;
+  --color-comment-border:  #dcd9d5;
+  --color-comment-anchor:  rgba(244, 197, 66, 0.42);
+  --color-comment-anchor-active: rgba(244, 197, 66, 0.72);
+
+  /* ── Review: tracked changes (M3) ──────────────────────── */
+  /* Darkened so each stays >= 5:1 on the white page. */
+  --color-insertion:       #0f7a44;   /* 5.4:1 on white */
+  --color-deletion:        #b3261e;   /* 6.5:1 on white */
+  --color-insertion-bg:    rgba(15, 122, 68, 0.12);
+  --color-deletion-bg:     rgba(179, 38, 30, 0.10);
+  --color-change-ai:       #6b2fbd;   /* 8.0:1 on white */
+  --color-change-human:    #106ebe;   /* the Fluent blue used by the chrome */
 
   --page-shadow:
     0 1px 3px  rgba(0, 0, 0, 0.04),
