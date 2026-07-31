@@ -415,7 +415,10 @@ export function parseMarkdown(markdown: string): ParsedPlan {
   }) as AnyToken[];
 
   const content: JSONContent[] = [];
-  const source = new SourceMap(detectWrapWidth(collectWrapSamples(tokens)));
+  const source = new SourceMap({
+    wrapWidth: detectWrapWidth(collectWrapSamples(tokens)),
+    ...detectListStyle(tokens),
+  });
 
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i];
@@ -523,6 +526,76 @@ function collectWrapSamples(tokens: AnyToken[]): string[] {
     }
   }
   return samples;
+}
+
+// ─── List style ─────────────────────────────────────────────────────────────
+
+/**
+ * How the author writes lists, so a rebuilt one does not announce itself.
+ *
+ * A serializer has to pick *some* bullet and *some* nesting width. Picking a
+ * fixed one means that the first edit anywhere in a list written the other way
+ * rewrites every line of it — an untouched-content diff, which is the drift
+ * invariant 2 exists to prevent. So the file's own habit is measured instead,
+ * the same way the wrap width already is.
+ */
+function detectListStyle(tokens: AnyToken[]): {
+  bullet: string;
+  nestIndent: number;
+} {
+  const bullets = new Map<string, number>();
+  const nests = new Map<number, number>();
+
+  const visit = (list: Tokens.List): void => {
+    for (const item of list.items) {
+      const marker = markerOf(item.raw);
+      if (!list.ordered && marker) {
+        bullets.set(marker.char, (bullets.get(marker.char) ?? 0) + 1);
+      }
+      for (const child of (item.tokens ?? []) as AnyToken[]) {
+        if (child.type !== "list") continue;
+        const inner = child as Tokens.List;
+        const first = inner.items[0];
+        if (first && marker) {
+          // marked dedents a nested item by the parent's marker width, so what
+          // is left in front of it is the extra the author typed.
+          const width = marker.width + leadingSpaces(first.raw);
+          nests.set(width, (nests.get(width) ?? 0) + 1);
+        }
+        visit(inner);
+      }
+    }
+  };
+
+  for (const token of tokens) if (token.type === "list") visit(token as Tokens.List);
+
+  return {
+    bullet: mostCommon(bullets) ?? "-",
+    nestIndent: mostCommon(nests) ?? 2,
+  };
+}
+
+function markerOf(raw: string): { char: string; width: number } | null {
+  const match = /^ *(?:([-*+])|\d{1,9}[.)]) +/.exec(raw);
+  if (!match) return null;
+  const bare = match[0].trimStart();
+  return { char: match[1] ?? "", width: bare.length };
+}
+
+function leadingSpaces(text: string): number {
+  return (/^ */.exec(text)?.[0] ?? "").length;
+}
+
+function mostCommon<T>(counts: Map<T, number>): T | undefined {
+  let best: T | undefined;
+  let bestCount = 0;
+  for (const [value, count] of counts) {
+    if (count > bestCount) {
+      best = value;
+      bestCount = count;
+    }
+  }
+  return best;
 }
 
 // ─── Alignment with the live editor ─────────────────────────────────────────
