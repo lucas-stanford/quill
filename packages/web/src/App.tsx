@@ -1,24 +1,40 @@
-import { useEffect, useState } from "react";
-import { AppShell } from "./shell";
-import { PlanEditor } from "./editor";
-import { fetchPlan } from "./api";
-import type { LoadStatus, PlanResponse } from "./types";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AppShell, Ribbon } from "./shell";
+import { PlanEditor, usePlanEditor } from "./editor";
+import { useLivePlan } from "./live";
+import { ConflictError, fetchPlan, savePlan } from "./api";
+import type { LoadStatus, PlanResponse, SaveState } from "./types";
 
 /**
- * FROZEN WIRING — see CONTRACT.md. This file joins the two parallel workstreams;
+ * FROZEN WIRING — see CONTRACT.md. This file joins the parallel workstreams;
  * do not edit it in a feature worktree.
+ *
+ * Owns the save lifecycle. Two rules keep local edits safe:
+ *   1. `doc` only changes on load or on an accepted external reload, so the
+ *      editor is never reset by our own saves.
+ *   2. An external change is never applied while the document is dirty.
  */
+
+const AUTOSAVE_DELAY_MS = 700;
+
 export default function App() {
-  const [plan, setPlan] = useState<PlanResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [doc, setDoc] = useState<PlanResponse | null>(null);
   const [status, setStatus] = useState<LoadStatus>("loading");
+  const [error, setError] = useState<string | null>(null);
+  const [saveState, setSaveState] = useState<SaveState>("idle");
+
+  const revisionRef = useRef("");
+  const pendingRef = useRef<string | null>(null);
+  const dirtyRef = useRef(false);
+  const timerRef = useRef<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     fetchPlan()
       .then((p) => {
         if (cancelled) return;
-        setPlan(p);
+        setDoc(p);
+        revisionRef.current = p.revision;
         setStatus("ready");
       })
       .catch((e: unknown) => {
@@ -31,9 +47,85 @@ export default function App() {
     };
   }, []);
 
+  const flush = useCallback(async () => {
+    const markdown = pendingRef.current;
+    if (markdown === null) return;
+    pendingRef.current = null;
+    setSaveState("saving");
+    try {
+      const saved = await savePlan(markdown, revisionRef.current);
+      revisionRef.current = saved.revision;
+      if (pendingRef.current === null) {
+        dirtyRef.current = false;
+        setSaveState("saved");
+      }
+    } catch (e: unknown) {
+      if (e instanceof ConflictError) {
+        setSaveState("conflict");
+      } else {
+        setSaveState("error");
+      }
+    }
+  }, []);
+
+  const handleChange = useCallback(
+    (markdown: string) => {
+      pendingRef.current = markdown;
+      dirtyRef.current = true;
+      setSaveState("dirty");
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+      timerRef.current = window.setTimeout(() => void flush(), AUTOSAVE_DELAY_MS);
+    },
+    [flush],
+  );
+
+  const editor = usePlanEditor({ markdown: doc?.markdown ?? "", onChange: handleChange });
+
+  useLivePlan({
+    enabled: status === "ready",
+    onChanged: ({ revision }) => {
+      if (revision === revisionRef.current) return;
+      if (dirtyRef.current) {
+        setSaveState("stale");
+        return;
+      }
+      void fetchPlan().then((p) => {
+        setDoc(p);
+        revisionRef.current = p.revision;
+        setSaveState("idle");
+      });
+    },
+  });
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+        void flush();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [flush]);
+
+  useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (dirtyRef.current) e.preventDefault();
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, []);
+
   return (
-    <AppShell docName={plan?.name ?? "Untitled"} status={status} error={error}>
-      {plan ? <PlanEditor markdown={plan.markdown} /> : null}
+    <AppShell
+      docName={doc?.name ?? "Untitled"}
+      status={status}
+      error={error}
+      saveState={saveState}
+      toolbar={status === "ready" ? <Ribbon editor={editor} /> : null}
+    >
+      {doc ? <PlanEditor editor={editor} /> : null}
     </AppShell>
   );
 }

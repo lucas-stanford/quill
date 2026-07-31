@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { LoadStatus } from "../types";
+import type { LoadStatus, SaveState } from "../types";
 import "./AppShell.css";
 
 /** FROZEN PROP CONTRACT — the shape may not change; the implementation is yours. */
@@ -9,11 +9,15 @@ export interface AppShellProps {
   status: LoadStatus;
   /** Present only when status === "error". */
   error?: string | null;
+  /** Autosave lifecycle — surface it quietly, the way Word shows "Saved". */
+  saveState?: SaveState;
+  /** The formatting ribbon. Render it between the title bar and the canvas. */
+  toolbar?: ReactNode;
   /** The editor. Render it inside the white page. */
   children: ReactNode;
 }
 
-export function AppShell({ docName, status, error, children }: AppShellProps) {
+export function AppShell({ docName, status, error, saveState, toolbar, children }: AppShellProps) {
   return (
     <div className="shell">
       <header className="titlebar">
@@ -23,9 +27,11 @@ export function AppShell({ docName, status, error, children }: AppShellProps) {
         </div>
         <span className="titlebar-docname">{docName}</span>
         <div className="titlebar-status" aria-live="polite" aria-atomic="true">
-          <StatusBadge status={status} />
+          <StatusBadge status={status} saveState={saveState} />
         </div>
       </header>
+
+      {toolbar}
 
       <main className="page-canvas">
         <div className="page-canvas-inner">
@@ -74,12 +80,15 @@ function QuillNib() {
 /* ── Status badge ─────────────────────────────────────────────
    Shown right-aligned in the title bar. Ready state is silent. */
 
-function StatusBadge({ status }: { status: LoadStatus }) {
+function StatusBadge({ status, saveState }: { status: LoadStatus; saveState?: SaveState }) {
   if (status === "loading") {
     return <span className="status-badge status-badge--loading">Opening…</span>;
   }
   if (status === "error") {
     return <span className="status-badge status-badge--error">Error</span>;
+  }
+  if (saveState && saveState !== "idle") {
+    return <span className="status-badge">{saveState}</span>;
   }
   return null;
 }

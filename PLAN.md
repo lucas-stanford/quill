@@ -78,6 +78,8 @@ starts work.
 Deliberately Word-on-the-web:
 
 - Grey canvas, white page with real margins, serif body text, page-width measure.
+- Dark by default, with a light theme that keeps the Word-on-the-web look. Both are
+  first-class; dark should feel like a real dark word processor, not an inverted document.
 - Slim ribbon: styles dropdown, bold/italic, lists, headings, comment, track-changes toggle.
 - Right margin holds comment bubbles, connected to their anchor by a thin leader line.
   Clicking a bubble highlights the anchored text and vice versa.

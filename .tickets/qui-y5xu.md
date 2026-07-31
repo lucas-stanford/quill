@@ -1,6 +1,6 @@
 ---
 id: qui-y5xu
-status: in_progress
+status: closed
 deps: []
 links: []
 created: 2026-07-31T18:51:14Z
@@ -36,3 +36,22 @@ M1 split into 3 parallel lanes, each in its own git worktree off the scaffold co
   m1/chrome  ../quill-wt/chrome  packages/web/src/shell,styles  grey field, white page, title bar, 3 states
 
 Coordination via CONTRACT.md: frozen HTTP contract (PlanResponse), frozen component props (AppShellProps, PlanEditorProps), frozen wiring in App.tsx, and strict file ownership so the merge is conflict-free. Dependencies pre-installed and lockfile committed so no lane touches package.json.
+
+**2026-07-31T19:22:28Z**
+
+M1 complete. Merged m1/cli, m1/editor, m1/chrome into main with zero conflicts — the frozen contract held.
+
+Verified end to end:
+  quill --help/--version        exit 0
+  missing file / dir / non-.md  clear error, exit 1
+  port 7823 busy                scans to 7824
+  GET /api/plan                 200, PLAN.md, 6518 bytes, sha256 revision
+  GET /                         200 SPA
+  path traversal raw + %2e%2e   serves index.html, never /etc/passwd
+  browser at 1440 and 1024      no horizontal scroll, 0 console errors
+
+One integration bug found and fixed post-merge (cc69756): prosemirror-view injects
+.ProseMirror pre { white-space: pre-wrap } at runtime, outranking the editor lane's
+rule by load order, so the ASCII diagram wrapped instead of scrolling. Invisible to
+both lanes in isolation — it only appears once the editor sits inside the 816px page.
+Worth remembering: parallel lanes cannot catch cross-lane CSS cascade conflicts.
