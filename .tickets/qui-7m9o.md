@@ -1,7 +1,7 @@
 ---
 id: qui-7m9o
 status: open
-deps: [qui-xbyx]
+deps: [qui-xbyx, qui-2gwn, qui-m1pf]
 links: []
 created: 2026-07-31T18:51:14Z
 type: milestone
