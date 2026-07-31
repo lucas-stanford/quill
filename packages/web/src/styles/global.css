@@ -54,6 +54,22 @@
   --color-control-hover:   rgba(255, 255, 255, 0.07);
   --color-control-active:  rgba(74, 160, 224, 0.20);
 
+  /* ── M4: filled primary action and raised surfaces ────────
+   * `Update with AI` is the one filled button in the chrome, so it needs a
+   * label colour that survives on the accent: near-black on #4fa3e0 is 6.8:1,
+   * where white would be 2.4:1 and illegible.
+   * Raised surfaces (the instruction popover, the review bar) sit one step
+   * above BOTH the canvas and the page, so a floating control reads as an
+   * object over the document rather than a part of it. */
+  --color-accent-text:     #14141a;
+  --color-accent-hover:    #67b1e6;
+  --color-accent-active:   #3e93d3;
+  --color-accent-divider:  rgba(0, 0, 0, 0.22);
+  --color-surface-raised:  #2b2b31;
+  --color-surface-raised-border: #3f3f47;
+  /* Wash behind the "nothing is pending" warning, on the warning hue. */
+  --color-warning-bg:      rgba(244, 197, 66, 0.12);
+
   /* ── Shell-only extras (not in shared contract) ──────────── */
   --color-error:           #ff6b6b;   /* save errors, load errors */
   --color-warning:         #f4c542;   /* stale-state indicator */
@@ -109,6 +125,12 @@
   --canvas-pad-top:     28px;
   --canvas-pad-bottom:  64px;
   --canvas-gutter:      24px;
+  /*
+   * How far the floating review bar sits above the bottom of the window. It is
+   * an overlay, so this is the only geometry it has and none of it belongs to
+   * the canvas — nothing about the bar can move the page.
+   */
+  --review-bar-offset:  20px;
 
   /* ── Comment rail ───────────────────────────────────────
    * Wide enough for a readable comment card (~40 characters).
@@ -160,6 +182,16 @@
 
   --color-control-hover:   rgba(0, 0, 0, 0.05);
   --color-control-active:  rgba(16, 110, 190, 0.12);
+
+  /* ── M4: filled primary action and raised surfaces ────────
+   * White on the Fluent blue is 5.3:1; near-black would be 4.1:1. */
+  --color-accent-text:     #ffffff;
+  --color-accent-hover:    #0f62a8;
+  --color-accent-active:   #0d5691;
+  --color-accent-divider:  rgba(255, 255, 255, 0.28);
+  --color-surface-raised:  #ffffff;
+  --color-surface-raised-border: #dcd9d5;
+  --color-warning-bg:      rgba(165, 86, 0, 0.08);
 
   --color-error:           #a80000;
   --color-warning:         #a55600;

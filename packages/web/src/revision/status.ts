@@ -1,0 +1,108 @@
+/**
+ * revision/status.ts
+ *
+ * The words. Kept out of the component so the copy for every state is one
+ * table that can be read — and tested — at a glance, and so the in-flight,
+ * done and failed states can never fall out of step with what is announced to
+ * a screen reader.
+ */
+
+import type { RevisionStatus } from "../types";
+
+export type RevisionTone = "idle" | "busy" | "success" | "error" | "neutral";
+
+export interface RevisionPresentation {
+  /** Short label shown in the pill. */
+  label: string;
+  /** Full sentence for the aria-live region. Empty means "say nothing". */
+  announcement: string;
+  tone: RevisionTone;
+  /** True while the agent owns the request and cancelling is meaningful. */
+  busy: boolean;
+}
+
+export function presentRevision(
+  status: RevisionStatus,
+  error: string | null,
+): RevisionPresentation {
+  switch (status) {
+    case "queued":
+      return {
+        label: "Sending…",
+        announcement: "Sending your comments and edits to the agent.",
+        tone: "busy",
+        busy: true,
+      };
+    case "working":
+      return {
+        label: "AI is rewriting…",
+        announcement: "The agent is rewriting the plan. You can keep reading, or cancel.",
+        tone: "busy",
+        busy: true,
+      };
+    case "done":
+      return {
+        label: "Applied as tracked changes",
+        announcement:
+          "The revision arrived and is marked up as tracked changes. Review them at the bottom of the page.",
+        tone: "success",
+        busy: false,
+      };
+    case "failed":
+      return {
+        label: error?.trim() ? error.trim() : "The revision failed.",
+        announcement: `The revision failed. ${error?.trim() ?? ""}`.trim(),
+        tone: "error",
+        busy: false,
+      };
+    case "cancelled":
+      return {
+        label: "Cancelled",
+        announcement: "The revision was cancelled. The document is untouched.",
+        tone: "neutral",
+        busy: false,
+      };
+    case "idle":
+    default:
+      return { label: "Update with AI", announcement: "", tone: "idle", busy: false };
+  }
+}
+
+/** What the button's badge says about the review markup waiting to be sent. */
+export function describePending(pendingCount: number): string {
+  if (pendingCount <= 0) return "Nothing is pending";
+  if (pendingCount === 1) return "1 comment or edit to send";
+  return `${pendingCount} comments and edits to send`;
+}
+
+/** The same count as a phrase that reads inside a sentence. */
+function pendingPhrase(pendingCount: number): string {
+  return pendingCount === 1 ? "1 comment or edit" : `${pendingCount} comments and edits`;
+}
+
+/**
+ * Sending with nothing pending and no instruction is a no-op the user should
+ * be warned about rather than allowed to sit through.
+ */
+export function canSend(pendingCount: number, instruction: string): boolean {
+  return pendingCount > 0 || instruction.trim() !== "";
+}
+
+/** Tooltip on the primary control. */
+export function updateButtonHint(pendingCount: number): string {
+  return canSend(pendingCount, "")
+    ? `Send ${pendingPhrase(pendingCount)} to the agent and get the rewrite back as tracked changes`
+    : "Nothing is pending — add an instruction to tell the agent what to change";
+}
+
+/**
+ * A request that never reached the agent — no server, no endpoint, no network.
+ * The server's own words are kept verbatim (they may be the only diagnosis
+ * available) but a bare "Not found" tells the user nothing about what failed,
+ * so the sentence around it is ours.
+ */
+export function transportFailure(message: string): string {
+  const raw = message.trim();
+  if (!raw) return "Could not reach the agent.";
+  return `Could not reach the agent — ${raw}`;
+}

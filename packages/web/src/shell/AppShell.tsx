@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { TrackedChangesApi } from "../tracking";
 import type { EditorMode, LoadStatus, SaveState } from "../types";
 import { useTheme } from "../theme";
+import { ReviewBar } from "./ReviewBar";
 import "./AppShell.css";
 
 /** FROZEN PROP CONTRACT — the shape may not change; the implementation is yours. */
@@ -42,7 +43,7 @@ export function AppShell({
   mode = "edit",
   modeSwitch,
   commentRail,
-  tracking: _tracking,
+  tracking,
   updateWithAI,
   children,
 }: AppShellProps) {
@@ -110,6 +111,14 @@ export function AppShell({
           </aside>
         </div>
       </main>
+
+      {/*
+       * Pinned to the bottom of the shell, over the canvas — never a row in it.
+       * The ribbon already overlays the top band; a second bar of chrome up
+       * there would have to be reserved for, and would push the page down the
+       * moment a revision landed. See ReviewBar.css.
+       */}
+      <ReviewBar tracking={tracking} />
     </div>
   );
 }
