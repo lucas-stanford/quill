@@ -2,6 +2,8 @@ import type {
   AnnotationsResponse,
   ConflictResponse,
   PlanResponse,
+  RevisionBrief,
+  RevisionState,
   Sidecar,
 } from "./types";
 
@@ -70,4 +72,27 @@ export async function saveAnnotations(
     throw new Error(await errorMessage(res, `Failed to save annotations (${res.status})`));
   }
   return (await res.json()) as AnnotationsResponse;
+}
+
+/** Asks for a revision. Returns the id to poll. */
+export async function requestRevision(brief: RevisionBrief): Promise<RevisionState> {
+  const res = await fetch("/api/revision", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ brief }),
+  });
+  if (!res.ok) throw new Error(await errorMessage(res, `Failed to request a revision (${res.status})`));
+  return (await res.json()) as RevisionState;
+}
+
+/** Polls the current revision. */
+export async function fetchRevision(): Promise<RevisionState> {
+  const res = await fetch("/api/revision");
+  if (!res.ok) throw new Error(await errorMessage(res, `Failed to read revision state (${res.status})`));
+  return (await res.json()) as RevisionState;
+}
+
+/** Cancels an in-flight revision. */
+export async function cancelRevision(): Promise<void> {
+  await fetch("/api/revision", { method: "DELETE" });
 }

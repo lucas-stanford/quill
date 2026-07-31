@@ -1,6 +1,6 @@
 ---
 id: qui-0ull
-status: in_progress
+status: closed
 deps: [qui-79yv]
 links: []
 created: 2026-07-31T18:51:14Z
@@ -27,3 +27,11 @@ Text-quote anchoring in the spirit of W3C annotation: exact quote plus prefix/su
 
 A reviewer can annotate any span, thread a discussion and resolve it. PLAN.md contains zero review metadata after a full annotate cycle. A comment stays attached after its paragraph is reworded, or lands in the tray — never silently lost.
 
+
+## Notes
+
+**2026-07-31T22:33:31Z**
+
+M3 complete. All five lanes merged with zero conflicts. 195 tests passing (55 CLI, 140 web).
+
+Verified end to end on main: creating a comment leaves PLAN.md byte-identical with all review metadata in the sidecar; an anchor whose text is rewritten on disk orphans into the tray rather than mis-attaching; rejecting all AI changes restores the document by sha256; the ribbon is inert and unreachable in review mode with the page not moving by a single pixel; and a plan containing tables survives autosave.

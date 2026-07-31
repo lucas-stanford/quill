@@ -27,6 +27,8 @@ export interface AppShellProps {
   commentRail?: ReactNode;
   /** Tracked-change controls. M4 surfaces accept/reject from here. */
   tracking?: TrackedChangesApi;
+  /** The Update with AI control. Render it in the title bar. */
+  updateWithAI?: ReactNode;
   /** The editor. Render it inside the white page. */
   children: ReactNode;
 }
@@ -41,6 +43,7 @@ export function AppShell({
   modeSwitch,
   commentRail,
   tracking: _tracking,
+  updateWithAI,
   children,
 }: AppShellProps) {
   /*
@@ -59,6 +62,7 @@ export function AppShell({
         </div>
         <span className="titlebar-docname">{docName}</span>
         <div className="titlebar-right">
+          {updateWithAI}
           {modeSwitch}
           <div aria-live="polite" aria-atomic="true">
             <StatusBadge status={status} saveState={saveState} />

@@ -1,6 +1,6 @@
 ---
 id: qui-2gwn
-status: in_progress
+status: closed
 deps: [qui-u2o3]
 links: []
 created: 2026-07-31T20:35:47Z
@@ -23,3 +23,13 @@ Add @tiptap/extension-table (plus row/cell/header). Requires a dependency change
 
 A plan containing a GFM table loads, renders as a table, survives a round-trip byte-stable, and is not corrupted by autosave.
 
+
+## Notes
+
+**2026-07-31T22:33:31Z**
+
+Fixed and verified on main. A plan containing tables now survives autosave — previously the table was dropped by the DOM parser and written back missing within a second, silently destroying the user's content.
+
+Verified with a plan containing an aligned table, an escaped pipe, inline marks, and a second ragged hand-aligned table. Editing one cell: content correct, alignment markers preserved, escaped pipe preserved, and the untouched second table stayed byte-identical. The edited table re-aligns as a whole, which is correct block granularity — a table is one block, so a changed cell means the block is re-serialized.
+
+The lane also fixed a drift bug the shell agent spotted, and reframed it correctly: undo was never the problem, the typed save was already drifting 4 lines instead of 1 because rebuilding a list re-indented untouched siblings, rewrote bullet characters, and dropped loose-list blank lines. 18 regression tests, 11 of which fail without the fix.

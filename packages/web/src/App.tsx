@@ -4,6 +4,7 @@ import { PlanEditor, usePlanEditor } from "./editor";
 import { useLivePlan } from "./live";
 import { useAnnotations, CommentRail } from "./annotations";
 import { useTrackedChanges } from "./tracking";
+import { useRevision, UpdateWithAI } from "./revision";
 import { ConflictError, fetchPlan, savePlan } from "./api";
 import type { EditorMode, LoadStatus, PlanResponse, SaveState } from "./types";
 
@@ -87,6 +88,13 @@ export default function App() {
   const annotations = useAnnotations({ editor, enabled: status === "ready" });
   const tracking = useTrackedChanges({ editor, enabled: status === "ready" });
 
+  const revision = useRevision({
+    enabled: status === "ready",
+    markdown: doc?.markdown ?? "",
+    annotations,
+    tracking,
+  });
+
   useLivePlan({
     enabled: status === "ready",
     onChanged: ({ revision }) => {
@@ -136,6 +144,14 @@ export default function App() {
         status === "ready" ? <CommentRail annotations={annotations} /> : null
       }
       tracking={status === "ready" ? tracking : undefined}
+      updateWithAI={
+        status === "ready" ? (
+          <UpdateWithAI
+            revision={revision}
+            pendingCount={annotations.forBrief().length + tracking.changes.length}
+          />
+        ) : null
+      }
     >
       {doc ? <PlanEditor editor={editor} /> : null}
     </AppShell>

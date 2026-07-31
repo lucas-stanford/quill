@@ -1,6 +1,6 @@
 ---
 id: qui-ws0m
-status: in_progress
+status: closed
 deps: [qui-u2o3]
 links: []
 created: 2026-07-31T20:41:59Z
@@ -19,3 +19,13 @@ Per-change accept/reject from a hover affordance, plus accept-all, reject-all, a
 
 Human and AI changes are visually distinguishable and individually reversible; rejecting all AI changes restores the pre-revision document exactly.
 
+
+## Notes
+
+**2026-07-31T22:28:41Z**
+
+Done and merged. Tracked changes are ProseMirror decorations in plugin state, not marks — so they cannot leak into the serialized markdown and cannot disturb the source-preserving round-trip. Deleted text stays in the document with a deletion range until accepted, so a pending deletion changes nothing on disk.
+
+Invariant 4 proven by hash: applyRevision followed by rejectAll('ai') restored sha256 d84990b6...aee97, byte-identical, cmp reports 0 differing bytes. A one-sentence AI revision produced exactly 2 changes, not a document rewrite.
+
+The plugin is registered at the HEAD of the plugin list — load-bearing, because appending after StarterKit's keymaps let Backspace really delete the selection and silently dropped text from the file. Caught in browser testing.

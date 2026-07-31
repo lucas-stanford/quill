@@ -98,3 +98,67 @@ export interface SaveAnnotationsRequest {
   sidecar: Sidecar;
   revision: string;
 }
+
+/* ── M4: the AI round-trip ────────────────────────────────────────────────
+   Review markup becomes a revision brief; the agent rewrites the plan; the
+   rewrite comes back as tracked changes so a bad revision is one click from
+   being undone. */
+
+/** A reviewer edit, framed to the agent as a decision already made. */
+export interface BriefEdit {
+  kind: "insertion" | "deletion";
+  text: string;
+  /** Surrounding text so the agent can locate the edit. */
+  context?: string;
+}
+
+/** A comment, framed to the agent as an instruction to apply. */
+export interface BriefComment {
+  /** The text the note is attached to. */
+  quote: string;
+  body: string;
+  author: string;
+  replies: string[];
+  /** True when the anchor could not be resolved against the current plan. */
+  orphaned: boolean;
+}
+
+/** The structured brief sent to the agent. Not a diff dump. */
+export interface RevisionBrief {
+  markdown: string;
+  comments: BriefComment[];
+  edits: BriefEdit[];
+  /** Freeform note from the update dialog. */
+  instruction?: string;
+}
+
+export type RevisionStatus = "idle" | "queued" | "working" | "done" | "failed" | "cancelled";
+
+/** POST /api/revision — asks for a revision. */
+export interface RevisionRequest {
+  brief: RevisionBrief;
+}
+
+/** GET /api/revision — poll for the outcome. */
+export interface RevisionState {
+  id: string;
+  status: RevisionStatus;
+  /** Present when status is "done": the rewritten plan. */
+  markdown?: string;
+  /** Present when status is "failed". */
+  error?: string;
+  /** How the revision is being serviced. */
+  mode: "attached" | "detached";
+}
+
+/**
+ * Written to `.quill/revision-request.json` in attached mode for the parent
+ * agent to pick up. The agent rewrites the plan on disk and the file watcher
+ * pushes it back to the browser.
+ */
+export interface QueuedRevision {
+  id: string;
+  planPath: string;
+  brief: RevisionBrief;
+  createdAt: string;
+}

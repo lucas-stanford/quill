@@ -1,148 +1,126 @@
-# CONTRACT — M3 parallel workstreams
+# CONTRACT — M4 parallel workstreams
 
-Five workstreams build M3 concurrently in separate git worktrees. This file is the
+Three workstreams build M4 concurrently in separate git worktrees. This file is the
 coordination boundary. **If you follow it, the merge is trivial. If you edit outside your
 lane, you cause a conflict.**
 
-M3 is **"Annotate and mark up"** — the reason Quill exists. Demo: select a step, leave a
-margin comment, strike a paragraph you disagree with, and see both rendered like a marked-up
-Word document.
+M4 is **"The AI round-trip"** — it closes the loop. Everything before it is a nicer way to
+read a plan; this is what makes it a way to change one. Demo: press **Update with AI** and
+the plan rewrites itself around your comments and edits, arriving as tracked changes you can
+accept or reject.
 
 ## Lanes and file ownership
 
 | Lane | Branch | Owns (edit freely) | Must not touch |
 |------|--------|--------------------|----------------|
-| **annotations** | `m3/annotations` | `packages/web/src/annotations/**` | everything else |
-| **tracking** | `m3/tracking` | `packages/web/src/tracking/**` | everything else |
-| **tables** | `m3/tables` | `packages/web/src/editor/**`, `packages/web/src/markdown/**` | everything else |
-| **server** | `m3/server` | `packages/cli/src/**` (except `types.ts`) | everything under `packages/web` |
-| **shell** | `m3/shell` | `packages/web/src/shell/**`, `packages/web/src/styles/**` | everything else |
+| **payload** | `m4/payload` | `packages/web/src/revision/buildBrief.ts` (+ new files under `revision/` prefixed `brief`) | everything else |
+| **bridge** | `m4/bridge` | `packages/cli/src/**` (except `types.ts`) | everything under `packages/web` |
+| **revision-ui** | `m4/revision-ui` | `packages/web/src/revision/**` except `buildBrief*`, plus `packages/web/src/shell/**` and `styles/**` | `editor/`, `markdown/`, `annotations/`, `tracking/`, `live/`, `App.tsx` |
 
 ### Frozen — nobody edits these
 
 `package.json` (all), `pnpm-workspace.yaml`, `pnpm-lock.yaml`, `tsconfig*.json`,
 `vite.config.ts`, `tsup.config.ts`, `index.html`, `scripts/copy-web.mjs`,
 `src/main.tsx`, `src/App.tsx`, `src/api.ts`, `src/theme.ts`, `src/types.ts` (both copies),
-`PLAN.md`, `.tickets/`.
+`PLAN.md`, `.tickets/`, and everything under `editor/`, `markdown/`, `annotations/`,
+`tracking/`, `live/` (M1–M3 shipped code).
 
-Dependencies are pre-installed and the lockfile is committed. **Do not add, remove or
-upgrade a dependency.** `@tiptap/extension-table` and `vitest` were added for M3 — use them.
+**Do not add, remove or upgrade a dependency.**
 
 ## HTTP API
 
 ```
-GET  /api/plan         -> 200 PlanResponse
-PUT  /api/plan         -> 200 PlanResponse | 409 ConflictResponse | 400 ErrorResponse
-GET  /api/live         -> text/event-stream (SSE), event `plan-changed`
-GET  /api/annotations  -> 200 AnnotationsResponse            [M3, server lane]
-PUT  /api/annotations  -> 200 AnnotationsResponse | 409 | 400 [M3, server lane]
+GET    /api/plan         200 PlanResponse
+PUT    /api/plan         200 | 409 ConflictResponse | 400
+GET    /api/live         text/event-stream, event `plan-changed`
+GET    /api/annotations  200 AnnotationsResponse
+PUT    /api/annotations  200 | 409 | 400
+POST   /api/revision     200 RevisionState        [M4, bridge lane]
+GET    /api/revision     200 RevisionState        [M4, bridge lane]
+DELETE /api/revision     204                      [M4, bridge lane]
 ```
-
-Review metadata lives in a sidecar next to the plan: `PLAN.md` -> `PLAN.quill.json`.
-**`PLAN.md` must contain zero review metadata.** A missing sidecar is not an error — it
-degrades to an empty `Sidecar` so Quill still works as a plain markdown editor.
 
 ```ts
-interface TextAnchor { quote: string; prefix: string; suffix: string }
-interface Comment {
-  id: string; anchor: TextAnchor; author: string; body: string;
-  createdAt: string; resolved: boolean; replies: CommentReply[]; orphaned?: boolean;
-}
-interface Sidecar { version: 1; comments: Comment[] }
-interface AnnotationsResponse { sidecar: Sidecar; revision: string }
-interface SaveAnnotationsRequest { sidecar: Sidecar; revision: string }
+interface RevisionBrief { markdown: string; comments: BriefComment[]; edits: BriefEdit[]; instruction?: string }
+interface BriefComment  { quote: string; body: string; author: string; replies: string[]; orphaned: boolean }
+interface BriefEdit     { kind: "insertion" | "deletion"; text: string; context?: string }
+type RevisionStatus = "idle" | "queued" | "working" | "done" | "failed" | "cancelled";
+interface RevisionState { id: string; status: RevisionStatus; markdown?: string; error?: string; mode: "attached" | "detached" }
+interface QueuedRevision { id: string; planPath: string; brief: RevisionBrief; createdAt: string }
 ```
 
-`revision` is the sha256 of the serialized sidecar. Same conflict-safe write semantics as
-the plan: mismatched revision -> 409, do not write. Reuse the existing atomic
-temp-file-plus-rename helper. The sidecar must **not** be watched by `/api/live` — only the
-plan is.
+## The two agent modes
+
+**Attached** is the primary path. Quill was spawned by a coding agent, which is blocked
+waiting. `POST /api/revision` writes a `QueuedRevision` to `.quill/revision-request.json`
+beside the plan; the parent agent picks it up, rewrites `PLAN.md` on disk, and the **existing
+M2 file watcher** pushes the new plan back to the browser. The queue is a plain file so any
+parent can poll it with no protocol library.
+
+**Detached** is what makes `quill PLAN.md` useful standalone: with nobody listening, Quill
+shells out to `copilot -p` itself with the revision prompt. It must degrade with a clear
+message when no CLI is on PATH — not hang, not crash.
+
+How the server decides which mode it is in is the bridge lane's call; make it explicit and
+justify it (an env var set when spawning, a flag, or a handshake).
 
 ## Component API
 
 `App.tsx` (frozen) is the only wiring point:
 
 ```tsx
-const editor      = usePlanEditor({ markdown, onChange });
-const annotations = useAnnotations({ editor, enabled: status === "ready" });
-useTrackedChanges({ editor, enabled: status === "ready" });
+const revision = useRevision({ enabled, markdown, annotations, tracking });
 
-<AppShell
-  docName status error saveState
-  mode={mode}
-  modeSwitch={<ModeSwitch mode={mode} onChange={setMode} />}
-  toolbar={<Ribbon editor={editor} />}
-  commentRail={<CommentRail annotations={annotations} />}
->
-  <PlanEditor editor={editor} />
-</AppShell>
+<AppShell … updateWithAI={<UpdateWithAI revision={revision} pendingCount={…} />}>
 ```
 
-Frozen signatures live in `annotations/useAnnotations.ts`, `annotations/CommentRail.tsx`,
-`tracking/useTrackedChanges.ts`, `shell/ModeSwitch.tsx`. **Prop and return shapes are
-frozen; implementations are entirely yours.** If you need a field that does not exist, stop
-and report it rather than changing the shape.
+Frozen signatures live in `revision/useRevision.ts`, `revision/buildBrief.ts`,
+`revision/UpdateWithAI.tsx`. **Shapes are frozen; implementations are yours.**
 
 ## Load-bearing invariants — do not break these
 
-1. **`onChange` must never fire from a programmatic load.** `App` autosaves whatever
-   `onChange` emits; firing on load is an infinite save loop that corrupts the user's file.
-2. **Untouched blocks must round-trip byte-identically.** M2 shipped source-preserving
-   serialization: each block's raw source is kept and re-emitted verbatim unless the block
-   actually changed. Typing one character changes exactly one line. Any change to the
-   editor schema or serializer must preserve this — verify with a real diff, not by eye.
-3. **Anchors are text-quote based, never offsets.** They must survive the AI rewording the
-   surrounding paragraph. Fuzzy-match on load; when matching fails, mark `orphaned` rather
-   than attaching to the wrong text. A mis-attached comment is worse than a lost one.
-4. **Rejecting every AI change must restore the pre-revision document exactly.** This is
-   what makes a bad AI rewrite safe, and M4 depends on it.
-5. **The ribbon only reports formatting for a caret the user placed.** `setContent` maps the
-   selection to the end of the document, so a naive `isActive()` reports the formatting of
-   whatever the plan happens to end with. `shell/useRibbonState.ts` gates on this — keep it.
+1. **`onChange` must never fire from a programmatic load.** `App` autosaves whatever it
+   emits; firing on load is an infinite save loop that corrupts the user's file.
+2. **Untouched blocks round-trip byte-identically.** Typing one character changes exactly
+   one line in `PLAN.md`. M2 and M3 both had to be fixed for this; do not regress it.
+3. **Anchors are text-quote based.** They must survive the AI rewording the surrounding
+   paragraph — that is precisely what M4 does, so this invariant finally gets exercised for
+   real. A comment whose text is rewritten should orphan, not mis-attach.
+4. **Rejecting every AI change restores the pre-revision document exactly**, proven by hash.
+   This is what makes a bad rewrite safe, and it is the reason the revision arrives as
+   tracked changes rather than a replacement.
+5. **The plan file holds no review metadata.** Comments live in the sidecar.
 
-## Editing versus reviewing
+## Framing the brief — this is a product decision, not a formatting detail
 
-`EditorMode = "edit" | "review"`. The formatting ribbon belongs to **edit mode only** —
-showing bold/italic while someone writes a margin note is noise.
-
-**Motion requirement (shell lane):** the ribbon slides out when edit mode is selected and
-slides back up when it is not, and **this must not move the rest of the UI**. The page must
-not jump or reflow. Animate `transform`, never `height` or `display`, and reserve or overlay
-the ribbon's space so canvas geometry is constant. Respect `prefers-reduced-motion`.
+- **Edits are decisions already made.** The reviewer struck a sentence; the agent does not
+  get to re-litigate it.
+- **Comments are instructions to apply**, attached to a specific quote.
+- **Resolved comments are excluded.** `annotations.forBrief()` already does this. Note it
+  *includes* orphans deliberately — an orphaned note still carries reviewer intent.
+- Send a structured brief, never a raw diff dump.
 
 ## Theming — dark by default
 
-All colour comes from the design tokens defined in `styles/global.css` for both themes
-(`:root` = dark, `:root[data-theme="light"]`). **Consume `var(--token)`; never hardcode a
-colour.** Comment bubbles and tracked-change marks need new tokens — the **shell lane**
-defines them and other lanes consume them:
-
-`--color-comment-bg`, `--color-comment-border`, `--color-comment-anchor`,
-`--color-insertion`, `--color-deletion`, `--color-change-ai`, `--color-change-human`.
-
-Provide `var(--token, fallback)` fallbacks so your lane renders standalone before the merge.
-
-> Cascade warning from M1: `prosemirror-view` injects `.ProseMirror pre { white-space:
-> pre-wrap }` **at runtime**, outranking an equal-specificity rule by load order. To beat a
-> ProseMirror default, raise specificity (`.ProseMirror.ProseMirror pre`), not `!important`.
+Consume design tokens with `var(--token)`; **never hardcode a colour.** Tokens for AI vs
+human change authorship already exist: `--color-change-ai`, `--color-change-human`,
+`--color-insertion`, `--color-deletion`.
 
 ## Build and test
 
 ```bash
 pnpm install
-pnpm typecheck      # must pass in every lane
-pnpm build          # web first, then cli
-pnpm test           # vitest — add tests for pure logic in your lane
+pnpm typecheck && pnpm build && pnpm test
 ```
+195 tests pass at head (55 CLI via node:test, 140 web via vitest). **Do not regress them.**
 
 ## Definition of done for your lane
 
 - `pnpm typecheck`, `pnpm build` and `pnpm test` all pass.
 - No edits outside your lane (`git diff --stat main` proves it).
-- Anything visual verified in **both themes**, dark first.
 - Real evidence in your report — diffs, output, screenshots. Claims are not accepted.
 - Committed on your branch with a clear message.
 
-## M3 scope discipline
+## M4 scope discipline
 
-No AI round-trip, no approve flow, no ferricket handoff. Those are M4–M5.
+No approve flow, no exit protocol, no ferricket handoff, no packaging. Those are M5.

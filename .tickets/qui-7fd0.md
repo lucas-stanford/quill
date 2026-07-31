@@ -1,6 +1,6 @@
 ---
 id: qui-7fd0
-status: in_progress
+status: closed
 deps: []
 links: []
 created: 2026-07-31T20:41:59Z
@@ -23,3 +23,9 @@ Text-quote anchoring in the spirit of the W3C annotation model: exact quote, con
 
 A comment stays attached after its paragraph is reworded, orphans rather than mis-attaching when it cannot, and PLAN.md contains zero review metadata after a full annotate cycle.
 
+
+## Notes
+
+**2026-07-31T22:28:40Z**
+
+Done and merged, verified on main. Anchors are quote plus ~48 chars of prefix/suffix, never offsets. Resolution: exact occurrence, then context-scored disambiguation for repeated quotes with a tie orphaning rather than guessing, then banded fuzzy Levenshtein accepted only at >=0.80 similarity. That threshold is deliberately stricter than the ~0.75 typical of text-quote libraries because a mis-attached comment is worse than a lost one. Verified end to end: commenting leaves PLAN.md byte-identical and writes everything to the sidecar.

@@ -1,6 +1,6 @@
 ---
 id: qui-mcib
-status: in_progress
+status: closed
 deps: [qui-7fd0, qui-y8ew]
 links: []
 created: 2026-07-31T20:41:59Z
@@ -23,3 +23,9 @@ Bubbles must never overlap: lay them out by preferred anchor position then push 
 
 Any span can be annotated and threaded; bubbles align to their anchors without overlapping; both themes look right.
 
+
+## Notes
+
+**2026-07-31T22:28:40Z**
+
+Done and merged. Bubbles laid out by measured anchor y, sorted in document order, pushed down on collision with a minimum 10px gap; the active thread gets a bounded pull-up. Highlighting uses ProseMirror inline decorations from the annotations lane's own plugin, so no node or mark is ever written to the document and the byte-identical round-trip is preserved. Verified: comment created with author, timestamp, quote, reply/resolve/delete, and a live anchor highlight in the text.
