@@ -1,4 +1,59 @@
-/* STUB — owned by the chrome workstream. */
 :root {
   color-scheme: light;
+
+  /* ── Palette (Fluent neutral scale + Office blue) ───────── */
+  --color-canvas:           #f3f2f1;  /* warm grey field behind the page */
+  --color-page:             #ffffff;  /* the white sheet */
+  --color-titlebar:         #ffffff;
+  --color-titlebar-border:  #edebe9;
+  --color-brand:            #106ebe;  /* Office / Fluent blue */
+  --color-text-primary:     #201f1e;
+  --color-text-secondary:   #605e5c;
+  --color-text-muted:       #a19f9d;
+  --color-error:            #a80000;
+
+  /* ── Page metrics ───────────────────────────────────────── */
+  /* US Letter at 96 dpi — 816 × 1056 px; 1 in = 96 px */
+  --page-width:       816px;
+  --page-padding-h:    96px;  /* 1-inch horizontal margin */
+  --page-padding-v:    72px;  /* 0.75-inch top/bottom padding */
+  --page-min-height: 1056px;
+  --page-shadow:
+    0 1px 3px  rgba(0, 0, 0, 0.04),
+    0 4px 20px rgba(0, 0, 0, 0.08);
+  --page-radius: 2px;
+
+  /* ── Chrome metrics ─────────────────────────────────────── */
+  --titlebar-height:    48px;
+  --canvas-pad-top:     36px;
+  --canvas-pad-bottom:  64px;
+
+  /* ── Typography for chrome (not editor content) ─────────── */
+  --font-chrome:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui,
+    Arial, sans-serif;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: var(--color-canvas);
+}
+
+#root {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
