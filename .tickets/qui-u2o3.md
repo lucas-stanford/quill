@@ -19,3 +19,9 @@ Critical invariant: onChange must never fire from a programmatic load, or App au
 
 serialize(parse(x)) is stable under repetition and the ASCII diagram in PLAN.md survives byte-identical.
 
+
+## Notes
+
+**2026-07-31T20:44:43Z**
+
+Merged, but verification on main found the serializer reflows soft-wrapped paragraphs: one keystroke rewrites 75 lines. Tracked as qui-gpcw. Round-trip is idempotent after the first pass, but that first pass is exactly the problem.

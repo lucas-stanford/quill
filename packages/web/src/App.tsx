@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppShell, Ribbon } from "./shell";
+import { AppShell, ModeSwitch, Ribbon } from "./shell";
 import { PlanEditor, usePlanEditor } from "./editor";
 import { useLivePlan } from "./live";
+import { useAnnotations, CommentRail } from "./annotations";
+import { useTrackedChanges } from "./tracking";
 import { ConflictError, fetchPlan, savePlan } from "./api";
-import type { LoadStatus, PlanResponse, SaveState } from "./types";
+import type { EditorMode, LoadStatus, PlanResponse, SaveState } from "./types";
 
 /**
  * FROZEN WIRING — see CONTRACT.md. This file joins the parallel workstreams;
@@ -22,6 +24,7 @@ export default function App() {
   const [status, setStatus] = useState<LoadStatus>("loading");
   const [error, setError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [mode, setMode] = useState<EditorMode>("edit");
 
   const revisionRef = useRef("");
   const pendingRef = useRef<string | null>(null);
@@ -81,6 +84,9 @@ export default function App() {
 
   const editor = usePlanEditor({ markdown: doc?.markdown ?? "", onChange: handleChange });
 
+  const annotations = useAnnotations({ editor, enabled: status === "ready" });
+  useTrackedChanges({ editor, enabled: status === "ready" });
+
   useLivePlan({
     enabled: status === "ready",
     onChanged: ({ revision }) => {
@@ -123,7 +129,12 @@ export default function App() {
       status={status}
       error={error}
       saveState={saveState}
+      mode={mode}
+      modeSwitch={status === "ready" ? <ModeSwitch mode={mode} onChange={setMode} /> : null}
       toolbar={status === "ready" ? <Ribbon editor={editor} /> : null}
+      commentRail={
+        status === "ready" ? <CommentRail annotations={annotations} /> : null
+      }
     >
       {doc ? <PlanEditor editor={editor} /> : null}
     </AppShell>

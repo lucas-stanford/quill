@@ -5,13 +5,16 @@
   "scripts": {
     "build": "pnpm -F @quill/web build && pnpm -F @quill/cli build",
     "dev:web": "pnpm -F @quill/web dev",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test"
   },
   "devDependencies": {
     "typescript": "^5.9.3"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild"]
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   },
   "packageManager": "pnpm@10.28.1"
 }

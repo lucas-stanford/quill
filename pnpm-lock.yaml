@@ -30,6 +30,9 @@ importers:
 
   packages/web:
     dependencies:
+      '@tiptap/extension-table':
+        specifier: ^3.29.0
+        version: 3.29.0(@tiptap/core@3.29.0(@tiptap/pm@3.29.0))(@tiptap/pm@3.29.0)
       '@tiptap/pm':
         specifier: ^3.29.0
         version: 3.29.0
@@ -64,6 +67,9 @@ importers:
       vite:
         specifier: ^8.1.5
         version: 8.1.5(@types/node@24.13.3)(esbuild@0.27.7)
+      vitest:
+        specifier: ^4.1.10
+        version: 4.1.10(@types/node@24.13.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.27.7))
 
 packages:
 
@@ -499,6 +505,9 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  '@standard-schema/spec@1.1.0':
+    resolution: {integrity: sha1-p5tV26+GBIEvUtFAssmrQbwVC7g=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@standard-schema/spec/-/spec-1.1.0.tgz}
+
   '@tiptap/core@3.29.0':
     resolution: {integrity: sha1-iPGyWtCTdoe9DCRGPG1ftonvfH0=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@tiptap/core/-/core-3.29.0.tgz}
     peerDependencies:
@@ -617,6 +626,12 @@ packages:
     peerDependencies:
       '@tiptap/core': 3.29.0
 
+  '@tiptap/extension-table@3.29.0':
+    resolution: {integrity: sha1-RG2C7xK+cp9w2tnalC36eJMP4lY=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@tiptap/extension-table/-/extension-table-3.29.0.tgz}
+    peerDependencies:
+      '@tiptap/core': 3.29.0
+      '@tiptap/pm': 3.29.0
+
   '@tiptap/extension-text@3.29.0':
     resolution: {integrity: sha1-snLYz7E4Tvn4o+DPmZ4I622IVMY=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@tiptap/extension-text/-/extension-text-3.29.0.tgz}
     peerDependencies:
@@ -652,6 +667,12 @@ packages:
   '@tybys/wasm-util@0.10.3':
     resolution: {integrity: sha1-AVy6np3UfOFNA9KoxdVHv7FpZl0=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@tybys/wasm-util/-/wasm-util-0.10.3.tgz}
 
+  '@types/chai@5.2.3':
+    resolution: {integrity: sha1-jpzZ4cNYH6azQaWu1ViOsoW+C0o=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/chai/-/chai-5.2.3.tgz}
+
+  '@types/deep-eql@4.0.2':
+    resolution: {integrity: sha1-M0MRlx06BxIefrkbaEpgXn7qnL0=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/deep-eql/-/deep-eql-4.0.2.tgz}
+
   '@types/estree@1.0.9':
     resolution: {integrity: sha1-zz8Oh2177hWpOrkluCv1cKOQSiQ=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/estree/-/estree-1.0.9.tgz}
 
@@ -682,6 +703,35 @@ packages:
       babel-plugin-react-compiler:
         optional: true
 
+  '@vitest/expect@4.1.10':
+    resolution: {integrity: sha1-eZwG/ES7DPfieEE3tifFzBcyhdQ=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@vitest/expect/-/expect-4.1.10.tgz}
+
+  '@vitest/mocker@4.1.10':
+    resolution: {integrity: sha1-JBOYerTNf6HCthS0BMQHv2rR6tE=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@vitest/mocker/-/mocker-4.1.10.tgz}
+    peerDependencies:
+      msw: ^2.4.9
+      vite: ^6.0.0 || ^7.0.0 || ^8.0.0
+    peerDependenciesMeta:
+      msw:
+        optional: true
+      vite:
+        optional: true
+
+  '@vitest/pretty-format@4.1.10':
+    resolution: {integrity: sha1-dVQucnOgjMEP1Nja1OPrHxbNlYw=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@vitest/pretty-format/-/pretty-format-4.1.10.tgz}
+
+  '@vitest/runner@4.1.10':
+    resolution: {integrity: sha1-/r8KIakWhCFCLRlVNw5gb+q2A1U=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@vitest/runner/-/runner-4.1.10.tgz}
+
+  '@vitest/snapshot@4.1.10':
+    resolution: {integrity: sha1-fj6f7H1NRyMuSTz9y9IXDeQ3HAQ=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@vitest/snapshot/-/snapshot-4.1.10.tgz}
+
+  '@vitest/spy@4.1.10':
+    resolution: {integrity: sha1-XAv6l7Vrup43QDyXbbd2/2q1b2U=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@vitest/spy/-/spy-4.1.10.tgz}
+
+  '@vitest/utils@4.1.10':
+    resolution: {integrity: sha1-/8cQVfGL/Msf0FhjZevCgkiS5AM=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@vitest/utils/-/utils-4.1.10.tgz}
+
   acorn@8.17.0:
     resolution: {integrity: sha1-F4WtuE+vjYrdEDabk4Jvwr0I8f4=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/acorn/-/acorn-8.17.0.tgz}
     engines: {node: '>=0.4.0'}
@@ -689,6 +739,10 @@ packages:
 
   any-promise@1.3.0:
     resolution: {integrity: sha1-q8av7tzqUugJzcA3au0845Y10X8=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/any-promise/-/any-promise-1.3.0.tgz}
+
+  assertion-error@2.0.1:
+    resolution: {integrity: sha1-9kGhlrM1aQsQcL8AtudZP+wZC/c=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/assertion-error/-/assertion-error-2.0.1.tgz}
+    engines: {node: '>=12'}
 
   bundle-name@4.1.0:
     resolution: {integrity: sha1-87lrNBYNZDGhnXaIE1r3z7h5eIk=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/bundle-name/-/bundle-name-4.1.0.tgz}
@@ -704,6 +758,10 @@ packages:
     resolution: {integrity: sha1-gE4eb1Bu42PLDjzLsJytXdmHCVk=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/cac/-/cac-6.7.14.tgz}
     engines: {node: '>=8'}
 
+  chai@6.2.2:
+    resolution: {integrity: sha1-rkG1LJrKh3NFBTYnF/MlX6zaNg4=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/chai/-/chai-6.2.2.tgz}
+    engines: {node: '>=18'}
+
   chokidar@4.0.3:
     resolution: {integrity: sha1-e+N6TAPJruHs/oYqSiOyxwwgXTA=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/chokidar/-/chokidar-4.0.3.tgz}
     engines: {node: '>= 14.16.0'}
@@ -718,6 +776,9 @@ packages:
   consola@3.4.2:
     resolution: {integrity: sha1-WvEQFFOXu2ev2rdwE/3DTK5ZDqc=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/consola/-/consola-3.4.2.tgz}
     engines: {node: ^14.18.0 || >=16.10.0}
+
+  convert-source-map@2.0.0:
+    resolution: {integrity: sha1-S1YPZJ/E6RjdCrdc9JYei8iC2Co=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/convert-source-map/-/convert-source-map-2.0.0.tgz}
 
   csstype@3.2.3:
     resolution: {integrity: sha1-7EjA8+mT5QZIyG2lWeJhCZXPmJo=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/csstype/-/csstype-3.2.3.tgz}
@@ -747,10 +808,20 @@ packages:
     resolution: {integrity: sha1-aJxdzcGQDvVYOky59te0c3QgdK0=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/detect-libc/-/detect-libc-2.1.2.tgz}
     engines: {node: '>=8'}
 
+  es-module-lexer@2.3.1:
+    resolution: {integrity: sha1-W/LfBpmdu+XwBqX0ahH7n1t7ORs=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/es-module-lexer/-/es-module-lexer-2.3.1.tgz}
+
   esbuild@0.27.7:
     resolution: {integrity: sha1-vK3OIrLz/XbyV+OmT4OmSYb+oR8=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/esbuild/-/esbuild-0.27.7.tgz}
     engines: {node: '>=18'}
     hasBin: true
+
+  estree-walker@3.0.3:
+    resolution: {integrity: sha1-Z8PlSexAKkh7T8GT0ZU6UkdSNA0=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/estree-walker/-/estree-walker-3.0.3.tgz}
+
+  expect-type@1.4.0:
+    resolution: {integrity: sha1-JO338MxppE0AhWe6RZSrlvPDo9Y=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/expect-type/-/expect-type-1.4.0.tgz}
+    engines: {node: '>=12.0.0'}
 
   fast-equals@5.4.1:
     resolution: {integrity: sha1-qRdLA+7OUwfb1nW+bW1C9/odAO0=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/fast-equals/-/fast-equals-5.4.1.tgz}
@@ -909,6 +980,10 @@ packages:
     resolution: {integrity: sha1-IQmtx5ZYh8/AXLvUQsrIv7s2CGM=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/object-assign/-/object-assign-4.1.1.tgz}
     engines: {node: '>=0.10.0'}
 
+  obug@2.1.4:
+    resolution: {integrity: sha1-kJDYpUilIlF5FdKqaq6QcZesbPg=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/obug/-/obug-2.1.4.tgz}
+    engines: {node: '>=12.20.0'}
+
   open@11.0.0:
     resolution: {integrity: sha1-iX5hMvmU01VMvPcuDfmPF2p+X2I=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/open/-/open-11.0.0.tgz}
     engines: {node: '>=20'}
@@ -1035,6 +1110,9 @@ packages:
   scheduler@0.27.0:
     resolution: {integrity: sha1-DE74LWfR5cHjWej8dtOofwRf5b0=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/scheduler/-/scheduler-0.27.0.tgz}
 
+  siginfo@2.0.0:
+    resolution: {integrity: sha1-MudscLeXJOO7Vny51UPrhYzPrzA=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/siginfo/-/siginfo-2.0.0.tgz}
+
   source-map-js@1.2.1:
     resolution: {integrity: sha1-HOVlD93YerwJnto33P8CTCZnrkY=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/source-map-js/-/source-map-js-1.2.1.tgz}
     engines: {node: '>=0.10.0'}
@@ -1042,6 +1120,12 @@ packages:
   source-map@0.7.6:
     resolution: {integrity: sha1-o2WKuH5bZCnIofO6AIPUxhyj7wI=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/source-map/-/source-map-0.7.6.tgz}
     engines: {node: '>= 12'}
+
+  stackback@0.0.2:
+    resolution: {integrity: sha1-Gsig2Ug4SNFpXkGLbQMaPDzmjjs=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/stackback/-/stackback-0.0.2.tgz}
+
+  std-env@4.2.0:
+    resolution: {integrity: sha1-jr4OxgSFZoq0ciezEvQlTN+AydM=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/std-env/-/std-env-4.2.0.tgz}
 
   sucrase@3.35.1:
     resolution: {integrity: sha1-RhnqUDk/6L0K5QccJqvZsuNGv+E=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/sucrase/-/sucrase-3.35.1.tgz}
@@ -1055,12 +1139,23 @@ packages:
   thenify@3.3.1:
     resolution: {integrity: sha1-iTLmhqQGYDigFt2eLKRq3Zg4qV8=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/thenify/-/thenify-3.3.1.tgz}
 
+  tinybench@2.9.0:
+    resolution: {integrity: sha1-EDyfi6bXI3pHq23R3P93JRhjQms=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/tinybench/-/tinybench-2.9.0.tgz}
+
   tinyexec@0.3.2:
     resolution: {integrity: sha1-lBeU5leoXklld5lcbu9m9T9Cs9I=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/tinyexec/-/tinyexec-0.3.2.tgz}
+
+  tinyexec@1.2.4:
+    resolution: {integrity: sha1-rkW7Lt69qUxw9OqJfg8SQ+Rw23E=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/tinyexec/-/tinyexec-1.2.4.tgz}
+    engines: {node: '>=18'}
 
   tinyglobby@0.2.17:
     resolution: {integrity: sha1-ViqabJ6ys7Ej05cZ+a9btE/NdjE=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/tinyglobby/-/tinyglobby-0.2.17.tgz}
     engines: {node: '>=12.0.0'}
+
+  tinyrainbow@3.1.0:
+    resolution: {integrity: sha1-HYpiOJP5XPCi3bnl0RFQ4ZFAlCE=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/tinyrainbow/-/tinyrainbow-3.1.0.tgz}
+    engines: {node: '>=14.0.0'}
 
   tree-kill@1.2.2:
     resolution: {integrity: sha1-TKCakJLIi3OnzcXooBtQeweQoMw=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/tree-kill/-/tree-kill-1.2.2.tgz}
@@ -1150,8 +1245,54 @@ packages:
       yaml:
         optional: true
 
+  vitest@4.1.10:
+    resolution: {integrity: sha1-fpKF7+JksRZwULejp/80eI4bevw=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/vitest/-/vitest-4.1.10.tgz}
+    engines: {node: ^20.0.0 || ^22.0.0 || >=24.0.0}
+    hasBin: true
+    peerDependencies:
+      '@edge-runtime/vm': '*'
+      '@opentelemetry/api': ^1.9.0
+      '@types/node': ^20.0.0 || ^22.0.0 || >=24.0.0
+      '@vitest/browser-playwright': 4.1.10
+      '@vitest/browser-preview': 4.1.10
+      '@vitest/browser-webdriverio': 4.1.10
+      '@vitest/coverage-istanbul': 4.1.10
+      '@vitest/coverage-v8': 4.1.10
+      '@vitest/ui': 4.1.10
+      happy-dom: '*'
+      jsdom: '*'
+      vite: ^6.0.0 || ^7.0.0 || ^8.0.0
+    peerDependenciesMeta:
+      '@edge-runtime/vm':
+        optional: true
+      '@opentelemetry/api':
+        optional: true
+      '@types/node':
+        optional: true
+      '@vitest/browser-playwright':
+        optional: true
+      '@vitest/browser-preview':
+        optional: true
+      '@vitest/browser-webdriverio':
+        optional: true
+      '@vitest/coverage-istanbul':
+        optional: true
+      '@vitest/coverage-v8':
+        optional: true
+      '@vitest/ui':
+        optional: true
+      happy-dom:
+        optional: true
+      jsdom:
+        optional: true
+
   w3c-keyname@2.2.8:
     resolution: {integrity: sha1-exfIxog9TouGrIq6edOeiA+IacU=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/w3c-keyname/-/w3c-keyname-2.2.8.tgz}
+
+  why-is-node-running@2.3.0:
+    resolution: {integrity: sha1-o/aalxB/SUs83Dvd3Yg6fWXOvwQ=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/why-is-node-running/-/why-is-node-running-2.3.0.tgz}
+    engines: {node: '>=8'}
+    hasBin: true
 
   wsl-utils@0.3.1:
     resolution: {integrity: sha1-lHmDbd8DviZ6rTq/w8sfbgyfHtE=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/wsl-utils/-/wsl-utils-0.3.1.tgz}
@@ -1416,6 +1557,8 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.62.2':
     optional: true
 
+  '@standard-schema/spec@1.1.0': {}
+
   '@tiptap/core@3.29.0(@tiptap/pm@3.29.0)':
     dependencies:
       '@tiptap/pm': 3.29.0
@@ -1516,6 +1659,11 @@ snapshots:
     dependencies:
       '@tiptap/core': 3.29.0(@tiptap/pm@3.29.0)
 
+  '@tiptap/extension-table@3.29.0(@tiptap/core@3.29.0(@tiptap/pm@3.29.0))(@tiptap/pm@3.29.0)':
+    dependencies:
+      '@tiptap/core': 3.29.0(@tiptap/pm@3.29.0)
+      '@tiptap/pm': 3.29.0
+
   '@tiptap/extension-text@3.29.0(@tiptap/core@3.29.0(@tiptap/pm@3.29.0))':
     dependencies:
       '@tiptap/core': 3.29.0(@tiptap/pm@3.29.0)
@@ -1594,6 +1742,13 @@ snapshots:
       tslib: 2.8.1
     optional: true
 
+  '@types/chai@5.2.3':
+    dependencies:
+      '@types/deep-eql': 4.0.2
+      assertion-error: 2.0.1
+
+  '@types/deep-eql@4.0.2': {}
+
   '@types/estree@1.0.9': {}
 
   '@types/node@24.13.3':
@@ -1615,9 +1770,52 @@ snapshots:
       '@rolldown/pluginutils': 1.0.1
       vite: 8.1.5(@types/node@24.13.3)(esbuild@0.27.7)
 
+  '@vitest/expect@4.1.10':
+    dependencies:
+      '@standard-schema/spec': 1.1.0
+      '@types/chai': 5.2.3
+      '@vitest/spy': 4.1.10
+      '@vitest/utils': 4.1.10
+      chai: 6.2.2
+      tinyrainbow: 3.1.0
+
+  '@vitest/mocker@4.1.10(vite@8.1.5(@types/node@24.13.3)(esbuild@0.27.7))':
+    dependencies:
+      '@vitest/spy': 4.1.10
+      estree-walker: 3.0.3
+      magic-string: 0.30.21
+    optionalDependencies:
+      vite: 8.1.5(@types/node@24.13.3)(esbuild@0.27.7)
+
+  '@vitest/pretty-format@4.1.10':
+    dependencies:
+      tinyrainbow: 3.1.0
+
+  '@vitest/runner@4.1.10':
+    dependencies:
+      '@vitest/utils': 4.1.10
+      pathe: 2.0.3
+
+  '@vitest/snapshot@4.1.10':
+    dependencies:
+      '@vitest/pretty-format': 4.1.10
+      '@vitest/utils': 4.1.10
+      magic-string: 0.30.21
+      pathe: 2.0.3
+
+  '@vitest/spy@4.1.10': {}
+
+  '@vitest/utils@4.1.10':
+    dependencies:
+      '@vitest/pretty-format': 4.1.10
+      convert-source-map: 2.0.0
+      tinyrainbow: 3.1.0
+
   acorn@8.17.0: {}
 
   any-promise@1.3.0: {}
+
+  assertion-error@2.0.1: {}
 
   bundle-name@4.1.0:
     dependencies:
@@ -1630,6 +1828,8 @@ snapshots:
 
   cac@6.7.14: {}
 
+  chai@6.2.2: {}
+
   chokidar@4.0.3:
     dependencies:
       readdirp: 4.1.2
@@ -1639,6 +1839,8 @@ snapshots:
   confbox@0.1.8: {}
 
   consola@3.4.2: {}
+
+  convert-source-map@2.0.0: {}
 
   csstype@3.2.3: {}
 
@@ -1656,6 +1858,8 @@ snapshots:
   define-lazy-prop@3.0.0: {}
 
   detect-libc@2.1.2: {}
+
+  es-module-lexer@2.3.1: {}
 
   esbuild@0.27.7:
     optionalDependencies:
@@ -1685,6 +1889,12 @@ snapshots:
       '@esbuild/win32-arm64': 0.27.7
       '@esbuild/win32-ia32': 0.27.7
       '@esbuild/win32-x64': 0.27.7
+
+  estree-walker@3.0.3:
+    dependencies:
+      '@types/estree': 1.0.9
+
+  expect-type@1.4.0: {}
 
   fast-equals@5.4.1: {}
 
@@ -1796,6 +2006,8 @@ snapshots:
   nanoid@3.3.16: {}
 
   object-assign@4.1.1: {}
+
+  obug@2.1.4: {}
 
   open@11.0.0:
     dependencies:
@@ -1979,9 +2191,15 @@ snapshots:
 
   scheduler@0.27.0: {}
 
+  siginfo@2.0.0: {}
+
   source-map-js@1.2.1: {}
 
   source-map@0.7.6: {}
+
+  stackback@0.0.2: {}
+
+  std-env@4.2.0: {}
 
   sucrase@3.35.1:
     dependencies:
@@ -2001,12 +2219,18 @@ snapshots:
     dependencies:
       any-promise: 1.3.0
 
+  tinybench@2.9.0: {}
+
   tinyexec@0.3.2: {}
+
+  tinyexec@1.2.4: {}
 
   tinyglobby@0.2.17:
     dependencies:
       fdir: 6.5.0(picomatch@4.0.5)
       picomatch: 4.0.5
+
+  tinyrainbow@3.1.0: {}
 
   tree-kill@1.2.2: {}
 
@@ -2065,7 +2289,39 @@ snapshots:
       esbuild: 0.27.7
       fsevents: 2.3.3
 
+  vitest@4.1.10(@types/node@24.13.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.27.7)):
+    dependencies:
+      '@vitest/expect': 4.1.10
+      '@vitest/mocker': 4.1.10(vite@8.1.5(@types/node@24.13.3)(esbuild@0.27.7))
+      '@vitest/pretty-format': 4.1.10
+      '@vitest/runner': 4.1.10
+      '@vitest/snapshot': 4.1.10
+      '@vitest/spy': 4.1.10
+      '@vitest/utils': 4.1.10
+      es-module-lexer: 2.3.1
+      expect-type: 1.4.0
+      magic-string: 0.30.21
+      obug: 2.1.4
+      pathe: 2.0.3
+      picomatch: 4.0.5
+      std-env: 4.2.0
+      tinybench: 2.9.0
+      tinyexec: 1.2.4
+      tinyglobby: 0.2.17
+      tinyrainbow: 3.1.0
+      vite: 8.1.5(@types/node@24.13.3)(esbuild@0.27.7)
+      why-is-node-running: 2.3.0
+    optionalDependencies:
+      '@types/node': 24.13.3
+    transitivePeerDependencies:
+      - msw
+
   w3c-keyname@2.2.8: {}
+
+  why-is-node-running@2.3.0:
+    dependencies:
+      siginfo: 2.0.0
+      stackback: 0.0.2
 
   wsl-utils@0.3.1:
     dependencies:

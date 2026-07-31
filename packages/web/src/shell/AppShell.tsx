@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { LoadStatus, SaveState } from "../types";
+import type { EditorMode, LoadStatus, SaveState } from "../types";
 import { useTheme } from "../theme";
 import "./AppShell.css";
 
@@ -12,13 +12,33 @@ export interface AppShellProps {
   error?: string | null;
   /** Autosave lifecycle — surface it quietly, the way Word shows "Saved". */
   saveState?: SaveState;
-  /** The formatting ribbon. Render it between the title bar and the canvas. */
+  /**
+   * The formatting ribbon. Belongs to edit mode only.
+   * It must slide in and out WITHOUT moving the page — animate transform and
+   * reserve or overlay its space; never animate height or toggle display.
+   */
   toolbar?: ReactNode;
+  /** Edit vs review. Drives ribbon visibility. */
+  mode?: EditorMode;
+  /** The edit/review control. Render it in the title bar. */
+  modeSwitch?: ReactNode;
+  /** Comment bubbles, rendered in the right margin beside the page. */
+  commentRail?: ReactNode;
   /** The editor. Render it inside the white page. */
   children: ReactNode;
 }
 
-export function AppShell({ docName, status, error, saveState, toolbar, children }: AppShellProps) {
+export function AppShell({
+  docName,
+  status,
+  error,
+  saveState,
+  toolbar,
+  mode = "edit",
+  modeSwitch,
+  commentRail,
+  children,
+}: AppShellProps) {
   return (
     <div className="shell">
       <header className="titlebar">
@@ -28,6 +48,7 @@ export function AppShell({ docName, status, error, saveState, toolbar, children 
         </div>
         <span className="titlebar-docname">{docName}</span>
         <div className="titlebar-right">
+          {modeSwitch}
           <div aria-live="polite" aria-atomic="true">
             <StatusBadge status={status} saveState={saveState} />
           </div>
@@ -35,7 +56,7 @@ export function AppShell({ docName, status, error, saveState, toolbar, children 
         </div>
       </header>
 
-      {toolbar}
+      {mode === "edit" ? toolbar : null}
 
       <main className="page-canvas">
         <div className="page-canvas-inner">
@@ -46,6 +67,7 @@ export function AppShell({ docName, status, error, saveState, toolbar, children 
             )}
             {status === "ready" && children}
           </div>
+          {commentRail}
         </div>
       </main>
     </div>
