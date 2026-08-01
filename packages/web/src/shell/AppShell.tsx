@@ -35,6 +35,8 @@ export interface AppShellProps {
   tracking?: TrackedChangesApi;
   /** The Update with AI control. Render it in the title bar. */
   updateWithAI?: ReactNode;
+  /** The Approve control. Render it in the title bar, as the final action. */
+  approveButton?: ReactNode;
   /** The editor. Render it inside the white page. */
   children: ReactNode;
 }
@@ -50,6 +52,7 @@ export function AppShell({
   commentRail,
   tracking,
   updateWithAI,
+  approveButton,
   children,
 }: AppShellProps) {
   /*
@@ -80,6 +83,7 @@ export function AppShell({
         <span className="titlebar-docname">{docName}</span>
         <div className="titlebar-right">
           {updateWithAI}
+          {approveButton}
           {modeSwitch}
           <div aria-live="polite" aria-atomic="true">
             <StatusBadge status={status} saveState={saveState} />

@@ -5,6 +5,7 @@ import { useLivePlan } from "./live";
 import { useAnnotations, CommentRail } from "./annotations";
 import { useTrackedChanges } from "./tracking";
 import { useRevision, UpdateWithAI } from "./revision";
+import { useApprove, ApproveButton } from "./approve";
 import { ConflictError, fetchPlan, savePlan } from "./api";
 import type { EditorMode, LoadStatus, PlanResponse, SaveState } from "./types";
 
@@ -120,6 +121,8 @@ export default function App() {
     tracking,
   });
 
+  const approve = useApprove({ enabled: status === "ready", annotations, tracking });
+
   useLivePlan({
     enabled: status === "ready",
     onChanged: ({ revision }) => {
@@ -169,6 +172,7 @@ export default function App() {
         status === "ready" ? <CommentRail annotations={annotations} /> : null
       }
       tracking={status === "ready" ? tracking : undefined}
+      approveButton={status === "ready" ? <ApproveButton approve={approve} /> : null}
       updateWithAI={
         status === "ready" ? (
           <UpdateWithAI

@@ -1,120 +1,75 @@
-# CONTRACT — M4 parallel workstreams
+# CONTRACT — M5 parallel workstreams
 
-Three workstreams build M4 concurrently in separate git worktrees. This file is the
-coordination boundary. **If you follow it, the merge is trivial. If you edit outside your
-lane, you cause a conflict.**
+Three workstreams build M5 concurrently in separate git worktrees. This file is the
+coordination boundary.
 
-M4 is **"The AI round-trip"** — it closes the loop. Everything before it is a nicer way to
-read a plan; this is what makes it a way to change one. Demo: press **Update with AI** and
-the plan rewrites itself around your comments and edits, arriving as tracked changes you can
-accept or reject.
+M5 is **"Approve, hand off, ship"** — the last milestone. Demo: press Approve, watch the plan
+become a populated ferricket board, and the terminal picks up where it left off. Then
+`npx quill PLAN.md` works on a machine that has never seen the repo.
 
 ## Lanes and file ownership
 
 | Lane | Branch | Owns (edit freely) | Must not touch |
 |------|--------|--------------------|----------------|
-| **payload** | `m4/payload` | `packages/web/src/revision/buildBrief.ts` (+ new files under `revision/` prefixed `brief`) | everything else |
-| **bridge** | `m4/bridge` | `packages/cli/src/**` (except `types.ts`) | everything under `packages/web` |
-| **revision-ui** | `m4/revision-ui` | `packages/web/src/revision/**` except `buildBrief*`, plus `packages/web/src/shell/**` and `styles/**` | `editor/`, `markdown/`, `annotations/`, `tracking/`, `live/`, `App.tsx` |
+| **exit** | `m5/exit` | `packages/cli/src/**` (except `types.ts`) | everything under `packages/web` |
+| **approve** | `m5/approve` | `packages/web/src/approve/**`, `packages/web/src/shell/**`, `styles/**` | `editor/`, `markdown/`, `annotations/`, `tracking/`, `revision/`, `live/`, `App.tsx`, `packages/cli` |
+| **package** | `m5/package` | `README.md` (new), `packages/cli/package.json`, `packages/cli/scripts/**`, root `package.json` | all source under `src/` |
 
-### Frozen — nobody edits these
+The **package** lane is the only lane permitted to touch a `package.json`, and only for
+packaging metadata — **not** to add, remove or upgrade a dependency.
 
-`package.json` (all), `pnpm-workspace.yaml`, `pnpm-lock.yaml`, `tsconfig*.json`,
-`vite.config.ts`, `tsup.config.ts`, `index.html`, `scripts/copy-web.mjs`,
-`src/main.tsx`, `src/App.tsx`, `src/api.ts`, `src/theme.ts`, `src/types.ts` (both copies),
-`PLAN.md`, `.tickets/`, and everything under `editor/`, `markdown/`, `annotations/`,
-`tracking/`, `live/` (M1–M3 shipped code).
+### Frozen — nobody else edits these
 
-**Do not add, remove or upgrade a dependency.**
+`pnpm-workspace.yaml`, `pnpm-lock.yaml`, `tsconfig*.json`, `vite.config.ts`, `tsup.config.ts`,
+`index.html`, `src/main.tsx`, `src/App.tsx`, `src/api.ts`, `src/theme.ts`, `src/types.ts`
+(both copies), `PLAN.md`, `.tickets/`, and all shipped M1–M4 source.
 
 ## HTTP API
 
 ```
-GET    /api/plan         200 PlanResponse
-PUT    /api/plan         200 | 409 ConflictResponse | 400
-GET    /api/live         text/event-stream, event `plan-changed`
-GET    /api/annotations  200 AnnotationsResponse
-PUT    /api/annotations  200 | 409 | 400
-POST   /api/revision     200 RevisionState        [M4, bridge lane]
-GET    /api/revision     200 RevisionState        [M4, bridge lane]
-DELETE /api/revision     204                      [M4, bridge lane]
+GET/PUT  /api/plan            M1/M2
+GET      /api/live            M2 (SSE)
+GET/PUT  /api/annotations     M3
+POST/GET/DELETE /api/revision M4
+GET      /api/tickets/preview 200 TicketPlan       [M5, exit lane]
+POST     /api/review/finish   200 ReviewSummary    [M5, exit lane]
 ```
 
 ```ts
-interface RevisionBrief { markdown: string; comments: BriefComment[]; edits: BriefEdit[]; instruction?: string }
-interface BriefComment  { quote: string; body: string; author: string; replies: string[]; orphaned: boolean }
-interface BriefEdit     { kind: "insertion" | "deletion"; text: string; context?: string }
-type RevisionStatus = "idle" | "queued" | "working" | "done" | "failed" | "cancelled";
-interface RevisionRequest { brief: RevisionBrief; prompt: string }
-interface RevisionState { id: string; status: RevisionStatus; markdown?: string; error?: string; mode: "attached" | "detached" }
-interface QueuedRevision { id: string; planPath: string; brief: RevisionBrief; createdAt: string }
+type ReviewOutcome = "approved" | "cancelled" | "errored";
+interface FinishReviewRequest { outcome: ReviewOutcome; createTickets?: boolean }
+interface ReviewSummary {
+  outcome: ReviewOutcome; planPath: string; revision: string;
+  openComments: number; tickets?: string[]; error?: string;
+}
+interface TicketPreview { title: string; level: number; parent?: number; deps: number[]; body?: string }
+interface TicketPlan { available: boolean; tickets: TicketPreview[]; reason?: string }
 ```
-
-### The prompt crosses the wire, not the package boundary
-
-`POST /api/revision` carries **both** the structured `brief` and the rendered
-`prompt` string. The browser formats the prompt (payload lane owns
-`formatBriefPrompt`), so there is exactly one prompt implementation in the product.
-The CLI sends `prompt` verbatim to the model in detached mode and writes both into the
-queue file in attached mode — it never re-derives the prompt, and never imports across
-the package boundary to get it.
-
-## The two agent modes
-
-**Attached** is the primary path. Quill was spawned by a coding agent, which is blocked
-waiting. `POST /api/revision` writes a `QueuedRevision` to `.quill/revision-request.json`
-beside the plan; the parent agent picks it up, rewrites `PLAN.md` on disk, and the **existing
-M2 file watcher** pushes the new plan back to the browser. The queue is a plain file so any
-parent can poll it with no protocol library.
-
-**Detached** is what makes `quill PLAN.md` useful standalone: with nobody listening, Quill
-shells out to `copilot -p` itself with the revision prompt. It must degrade with a clear
-message when no CLI is on PATH — not hang, not crash.
-
-How the server decides which mode it is in is the bridge lane's call; make it explicit and
-justify it (an env var set when spawning, a flag, or a handshake).
 
 ## Component API
 
 `App.tsx` (frozen) is the only wiring point:
 
 ```tsx
-const revision = useRevision({ enabled, markdown, annotations, tracking });
-
-<AppShell … updateWithAI={<UpdateWithAI revision={revision} pendingCount={…} />}>
+const approve = useApprove({ enabled, annotations, tracking });
+<AppShell … approveButton={<ApproveButton approve={approve} />}>
 ```
 
-Frozen signatures live in `revision/useRevision.ts`, `revision/buildBrief.ts`,
-`revision/UpdateWithAI.tsx`. **Shapes are frozen; implementations are yours.**
+Frozen signatures are in `approve/useApprove.ts` and `approve/ApproveButton.tsx`.
 
 ## Load-bearing invariants — do not break these
 
-1. **`onChange` must never fire from a programmatic load.** `App` autosaves whatever it
+1. **`onChange` must never fire from a programmatic load** — `App` autosaves whatever it
    emits; firing on load is an infinite save loop that corrupts the user's file.
 2. **Untouched blocks round-trip byte-identically.** Typing one character changes exactly
-   one line in `PLAN.md`. M2 and M3 both had to be fixed for this; do not regress it.
-3. **Anchors are text-quote based.** They must survive the AI rewording the surrounding
-   paragraph — that is precisely what M4 does, so this invariant finally gets exercised for
-   real. A comment whose text is rewritten should orphan, not mis-attach.
-4. **Rejecting every AI change restores the pre-revision document exactly**, proven by hash.
-   This is what makes a bad rewrite safe, and it is the reason the revision arrives as
-   tracked changes rather than a replacement.
-5. **The plan file holds no review metadata.** Comments live in the sidecar.
-
-## Framing the brief — this is a product decision, not a formatting detail
-
-- **Edits are decisions already made.** The reviewer struck a sentence; the agent does not
-  get to re-litigate it.
-- **Comments are instructions to apply**, attached to a specific quote.
-- **Resolved comments are excluded.** `annotations.forBrief()` already does this. Note it
-  *includes* orphans deliberately — an orphaned note still carries reviewer intent.
-- Send a structured brief, never a raw diff dump.
-
-## Theming — dark by default
-
-Consume design tokens with `var(--token)`; **never hardcode a colour.** Tokens for AI vs
-human change authorship already exist: `--color-change-ai`, `--color-change-human`,
-`--color-insertion`, `--color-deletion`.
+   one line in `PLAN.md`. This has been broken twice and fixed twice; do not regress it.
+3. **The plan file holds no review metadata.** Comments live in `PLAN.quill.json`.
+4. **The AI's output is never written to the plan by the server.** It returns in
+   `RevisionState.markdown` and lands as tracked changes so it can be rejected.
+5. **The formatting ribbon appears only while the user is actively editing.** This is the
+   user's most-repeated piece of feedback. It is hidden on load, hidden in review mode, and
+   hidden when focus leaves the document. Showing it more eagerly is a regression.
+6. **Nothing may move the page.** The ribbon and review bar animate `transform` only.
 
 ## Build and test
 
@@ -122,7 +77,7 @@ human change authorship already exist: `--color-change-ai`, `--color-change-huma
 pnpm install
 pnpm typecheck && pnpm build && pnpm test
 ```
-195 tests pass at head (55 CLI via node:test, 140 web via vitest). **Do not regress them.**
+**416 tests pass at head** (134 CLI via node:test, 282 web via vitest). Do not regress them.
 
 ## Definition of done for your lane
 
@@ -130,7 +85,3 @@ pnpm typecheck && pnpm build && pnpm test
 - No edits outside your lane (`git diff --stat main` proves it).
 - Real evidence in your report — diffs, output, screenshots. Claims are not accepted.
 - Committed on your branch with a clear message.
-
-## M4 scope discipline
-
-No approve flow, no exit protocol, no ferricket handoff, no packaging. Those are M5.

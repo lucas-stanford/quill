@@ -4,7 +4,10 @@ import type {
   PlanResponse,
   RevisionBrief,
   RevisionState,
+  ReviewOutcome,
+  ReviewSummary,
   Sidecar,
+  TicketPlan,
 } from "./types";
 
 /** Thrown when a save is rejected because the file changed on disk. */
@@ -98,4 +101,25 @@ export async function fetchRevision(): Promise<RevisionState> {
 /** Cancels an in-flight revision. */
 export async function cancelRevision(): Promise<void> {
   await fetch("/api/revision", { method: "DELETE" });
+}
+
+/** Previews the ferricket breakdown without creating anything. */
+export async function fetchTicketPlan(): Promise<TicketPlan> {
+  const res = await fetch("/api/tickets/preview");
+  if (!res.ok) throw new Error(await errorMessage(res, `Failed to preview tickets (${res.status})`));
+  return (await res.json()) as TicketPlan;
+}
+
+/** Ends the review and releases the CLI. */
+export async function finishReview(
+  outcome: ReviewOutcome,
+  createTickets = false,
+): Promise<ReviewSummary> {
+  const res = await fetch("/api/review/finish", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ outcome, createTickets }),
+  });
+  if (!res.ok) throw new Error(await errorMessage(res, `Failed to finish the review (${res.status})`));
+  return (await res.json()) as ReviewSummary;
 }

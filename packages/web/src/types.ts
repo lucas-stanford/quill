@@ -193,3 +193,52 @@ export interface QueuedRevision {
   brief: RevisionBrief;
   createdAt: string;
 }
+
+/* ── M5: approve, hand off, ship ──────────────────────────────────────────
+   A plan's job is to become work. Approving releases the CLI and can turn
+   the plan into a ferricket board. */
+
+/** How the review ended. The calling agent branches on this. */
+export type ReviewOutcome = "approved" | "cancelled" | "errored";
+
+/** POST /api/review/finish */
+export interface FinishReviewRequest {
+  outcome: ReviewOutcome;
+  /** Break the approved plan into fer tickets before exiting. */
+  createTickets?: boolean;
+}
+
+/** Printed to stdout as one line of JSON when quill exits. */
+export interface ReviewSummary {
+  outcome: ReviewOutcome;
+  /** Absolute path to the final plan. */
+  planPath: string;
+  /** sha256 of the final plan. */
+  revision: string;
+  /** Unresolved comments left behind, if any. */
+  openComments: number;
+  /** Ticket ids created by the ferricket handoff. */
+  tickets?: string[];
+  /** Present when outcome is "errored". */
+  error?: string;
+}
+
+/** GET /api/tickets/preview — what the breakdown would create. */
+export interface TicketPreview {
+  title: string;
+  /** Heading depth: 1 becomes an epic, deeper becomes a task. */
+  level: number;
+  /** Index into the preview array; undefined for a top-level ticket. */
+  parent?: number;
+  /** Indices this ticket depends on. */
+  deps: number[];
+  body?: string;
+}
+
+export interface TicketPlan {
+  /** Whether the fer CLI is available at all. */
+  available: boolean;
+  tickets: TicketPreview[];
+  /** Present when available is false. */
+  reason?: string;
+}
