@@ -1,6 +1,6 @@
 ---
 id: qui-7m9o
-status: in_progress
+status: closed
 deps: [qui-xbyx]
 links: []
 created: 2026-07-31T18:51:14Z
@@ -35,3 +35,9 @@ M5 scaffold committed. Types frozen (ReviewOutcome, ReviewSummary, TicketPreview
 Three lanes: exit (packages/cli — POST /api/review/finish with distinct exit codes and a one-line JSON summary on stdout, plus GET /api/tickets/preview and the fer shell-out), approve (the confirm step, ticket preview, and the terminal state after the server exits), package (npx-able tarball with prebuilt web assets and the README).
 
 Note for the exit lane: the server exits after responding to finish, so the browser's fetch may resolve as the connection dies. The approve lane has to handle that without showing a network error at the moment of success.
+
+**2026-08-01T05:09:28Z**
+
+M5 complete. 438 tests passing (149 CLI, 289 web).
+
+Final verification from a clean npx install: left a comment on step 2, previewed the breakdown, approved with the ticket handoff. Result — exit code 0, one JSON line on stdout, PLAN.md byte-identical, the comment in PLAN.quill.json anchored by quote, and 7 tickets on a board with the numbered steps chained as dependencies.

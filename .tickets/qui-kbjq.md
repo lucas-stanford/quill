@@ -1,6 +1,6 @@
 ---
 id: qui-kbjq
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-07-31T22:05:18Z
@@ -25,3 +25,11 @@ Everything below this epic ladders up to shipping npx quill.
 
 npx quill PLAN.md works on a clean machine, and the full loop — review, annotate, revise with AI, approve, break into tickets — works end to end.
 
+
+## Notes
+
+**2026-08-01T05:09:28Z**
+
+Shipped. Five milestones, 438 tests, npx quillmd works on a clean machine.
+
+The loop works end to end: an agent writes PLAN.md and runs quill; the reviewer annotates and marks up a Word-like page; Update with AI turns that markup into a revision delivered as tracked changes; Approve releases the CLI and optionally turns the plan into a ferricket board.
