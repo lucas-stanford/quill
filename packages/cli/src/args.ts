@@ -75,7 +75,18 @@ Options:
 Environment:
   QUILL_ATTACHED=1        Same as --attached. Set this when spawning quill from
                           an agent that will service revision requests itself.
-  QUILL_REVISION_TIMEOUT  Same as --revision-timeout.`);
+  QUILL_REVISION_TIMEOUT  Same as --revision-timeout.
+
+Exit codes:
+  0   approved   the reviewer approved the plan
+  10  cancelled  the review ended without approval (including Ctrl-C)
+  11  errored    the review could not be completed
+  1   startup failure (bad arguments, missing file, no free port)
+
+On exit quill prints the review summary as one line of JSON on stdout;
+everything else goes to stderr, so a parent can read stdout directly:
+
+  quill PLAN.md --no-open | jq -r .outcome`);
     process.exit(0);
   }
 

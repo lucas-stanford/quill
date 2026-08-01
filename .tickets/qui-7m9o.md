@@ -1,6 +1,6 @@
 ---
 id: qui-7m9o
-status: open
+status: in_progress
 deps: [qui-xbyx]
 links: []
 created: 2026-07-31T18:51:14Z
@@ -25,3 +25,13 @@ Shell out to the fer CLI rather than writing .tickets files directly, so ferrick
 
 'npx quill PLAN.md' works on a machine that has never seen the repo. Approving hands control back to the terminal and optionally lands the user on a fer board with correct parents and dependencies.
 
+
+## Notes
+
+**2026-08-01T00:22:02Z**
+
+M5 scaffold committed. Types frozen (ReviewOutcome, ReviewSummary, TicketPreview, TicketPlan), api.ts gained fetchTicketPlan and finishReview, App wires useApprove and renders ApproveButton in the title bar.
+
+Three lanes: exit (packages/cli — POST /api/review/finish with distinct exit codes and a one-line JSON summary on stdout, plus GET /api/tickets/preview and the fer shell-out), approve (the confirm step, ticket preview, and the terminal state after the server exits), package (npx-able tarball with prebuilt web assets and the README).
+
+Note for the exit lane: the server exits after responding to finish, so the browser's fetch may resolve as the connection dies. The approve lane has to handle that without showing a network error at the moment of success.

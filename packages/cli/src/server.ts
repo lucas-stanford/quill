@@ -9,6 +9,9 @@ import type {
   ConflictResponse,
   ErrorResponse,
   PlanResponse,
+  ReviewOutcome,
+  ReviewSummary,
+  TicketPlan,
   RevisionState,
   SavePlanRequest,
   Sidecar,
@@ -16,6 +19,7 @@ import type {
 import { hashContent } from "./hash.js";
 import { writeFileAtomic } from "./atomic.js";
 import { resolveStaticPath } from "./static-path.js";
+import { buildTicketPlan, countOpenComments, createTickets } from "./review.js";
 import {
   EMPTY_SIDECAR_REVISION,
   corruptBackupPathFor,
@@ -62,7 +66,9 @@ type JsonBody =
   | AnnotationsResponse
   | AnnotationsConflictResponse
   | RevisionState
-  | RevisionErrorResponse;
+  | RevisionErrorResponse
+  | TicketPlan
+  | ReviewSummary;
 
 function sendJson(res: ServerResponse, status: number, body: JsonBody): void {
   const json = JSON.stringify(body);
@@ -644,6 +650,75 @@ async function handleStatic(webRoot: string, pathname: string, res: ServerRespon
 }
 
 // ---------------------------------------------------------------------------
+// Review: preview the ticket breakdown, then finish and release the CLI
+// ---------------------------------------------------------------------------
+
+async function handleTicketPreview(planPath: string, res: ServerResponse): Promise<void> {
+  try {
+    const markdown = await readFile(planPath, "utf-8");
+    sendJson(res, 200, await buildTicketPlan(planPath, markdown));
+  } catch {
+    sendJson(res, 500, { error: "Failed to read the plan" });
+  }
+}
+
+const OUTCOMES: ReviewOutcome[] = ["approved", "cancelled", "errored"];
+
+async function handleFinishReview(
+  planPath: string,
+  sidecarPath: string,
+  req: IncomingMessage,
+  res: ServerResponse,
+  onFinish: (summary: ReviewSummary) => void,
+): Promise<void> {
+  let body: unknown;
+  try {
+    body = JSON.parse(await readBody(req));
+  } catch {
+    sendJson(res, 400, { error: "Invalid JSON body" });
+    return;
+  }
+
+  const outcome = (body as { outcome?: unknown })?.outcome;
+  if (typeof outcome !== "string" || !OUTCOMES.includes(outcome as ReviewOutcome)) {
+    sendJson(res, 400, { error: `body.outcome must be one of ${OUTCOMES.join(", ")}` });
+    return;
+  }
+  const wantsTickets = (body as { createTickets?: unknown })?.createTickets === true;
+
+  let markdown = "";
+  try {
+    markdown = await readFile(planPath, "utf-8");
+  } catch {
+    sendJson(res, 500, { error: "Failed to read the plan" });
+    return;
+  }
+
+  const summary: ReviewSummary = {
+    outcome: outcome as ReviewOutcome,
+    planPath,
+    revision: hashContent(markdown),
+    openComments: await countOpenComments(sidecarPath),
+  };
+
+  if (outcome === "approved" && wantsTickets) {
+    const plan = await buildTicketPlan(planPath, markdown);
+    if (!plan.available) {
+      // The handoff is optional; a missing fer must never fail an approval.
+      summary.error = plan.reason;
+    } else {
+      const created = await createTickets(planPath, plan.tickets);
+      summary.tickets = created.ids;
+      if (created.error) summary.error = created.error;
+    }
+  }
+
+  sendJson(res, 200, summary);
+  // Let the response flush before the process goes.
+  res.on("finish", () => onFinish(summary));
+}
+
+// ---------------------------------------------------------------------------
 // Request router
 // ---------------------------------------------------------------------------
 
@@ -652,6 +727,7 @@ function createHandler(
   webRoot: string,
   state: LiveState,
   revision: RevisionManager,
+  onFinish: (summary: ReviewSummary) => void,
 ) {
   const sidecarPath = sidecarPathFor(planPath);
 
@@ -723,6 +799,26 @@ function createHandler(
       return;
     }
 
+    if (pathname === "/api/tickets/preview") {
+      if (method === "GET") {
+        await handleTicketPreview(planPath, res);
+      } else {
+        res.writeHead(405, { "Content-Type": "text/plain", Allow: "GET" });
+        res.end("Method Not Allowed");
+      }
+      return;
+    }
+
+    if (pathname === "/api/review/finish") {
+      if (method === "POST") {
+        await handleFinishReview(planPath, sidecarPath, req, res, onFinish);
+      } else {
+        res.writeHead(405, { "Content-Type": "text/plain", Allow: "POST" });
+        res.end("Method Not Allowed");
+      }
+      return;
+    }
+
     if (pathname.startsWith("/api/")) {
       sendJson(res, 404, { error: "Not found" });
       return;
@@ -761,6 +857,8 @@ export interface StartServerOptions {
   maxAttempts?: number;
   /** Test seams, forwarded to the revision manager. */
   revisionOptions?: Pick<RevisionManagerOptions, "spawnFn" | "pollIntervalMs" | "logger">;
+  /** Called once the review ends, after the response has flushed. */
+  onFinish: (summary: ReviewSummary) => void;
 }
 
 function closeServer(
@@ -797,8 +895,9 @@ function bindServer(
   port: number,
   state: LiveState,
   revision: RevisionManager,
+  onFinish: (summary: ReviewSummary) => void,
 ): Promise<ServerHandle> {
-  const handler = createHandler(planPath, webRoot, state, revision);
+  const handler = createHandler(planPath, webRoot, state, revision, onFinish);
 
   return new Promise((fulfill, reject) => {
     const server = createServer((req, res) => {
@@ -864,7 +963,7 @@ export async function startServer(
     if (port > 65535) break;
 
     try {
-      return await bindServer(planPath, webRoot, port, state, revision);
+      return await bindServer(planPath, webRoot, port, state, revision, options.onFinish);
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "EADDRINUSE") continue;
       throw err;

@@ -1,6 +1,6 @@
 ---
 id: qui-snlw
-status: open
+status: in_progress
 deps: []
 links: []
 created: 2026-07-31T20:41:59Z
