@@ -56,7 +56,7 @@ export default function App() {
     };
   }, []);
 
-  const flush = useCallback(async () => {
+  const flush = useCallback(async (rebase = false) => {
     const markdown = pendingRef.current;
     if (markdown === null) return;
     pendingRef.current = null;
@@ -70,12 +70,32 @@ export default function App() {
       }
     } catch (e: unknown) {
       if (e instanceof ConflictError) {
+        /*
+         * The file moved under us. In attached mode this is routine and
+         * expected: the agent rewrote the plan on disk while its revision was
+         * being reviewed here as tracked changes, so the document in front of
+         * the reviewer already subsumes that write. Rebase onto the server's
+         * revision and retry once — the reviewer's document wins, because it
+         * is the only copy holding their accept/reject decisions.
+         *
+         * A second conflict means something genuinely contended, so stop and
+         * say so rather than looping.
+         */
+        revisionRef.current = e.current.revision;
+        if (!rebase) {
+          pendingRef.current = markdown;
+          await flushRef.current(true);
+          return;
+        }
         setSaveState("conflict");
       } else {
         setSaveState("error");
       }
     }
   }, []);
+
+  const flushRef = useRef(flush);
+  flushRef.current = flush;
 
   const handleChange = useCallback(
     (markdown: string) => {
