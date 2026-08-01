@@ -1,0 +1,458 @@
+/* ── Update with AI ──────────────────────────────────────────
+ *
+ * Lives in the title bar next to the mode switch, so it matches that control's
+ * 28 px height and 12 px type. Everything transient — the instruction popover
+ * and the outcome notice — is absolutely positioned, so no state of this
+ * control can resize the title bar or move the page beneath it.
+ */
+
+.uwai {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+/* Announced, never seen. */
+.uwai-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── Split button: send now | add an instruction ─────────────── */
+
+.uwai-split {
+  display: inline-flex;
+  align-items: stretch;
+  height: 28px;
+  border-radius: 5px;
+  /* One button visually; the divider is the second button's own border. */
+  background: var(--color-accent);
+  color: var(--color-accent-text);
+  flex-shrink: 0;
+}
+
+.uwai-main,
+.uwai-more {
+  display: inline-flex;
+  align-items: center;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-family: var(--font-chrome);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.uwai-main {
+  gap: 6px;
+  padding: 0 9px 0 10px;
+  border-radius: 5px 0 0 5px;
+  white-space: nowrap;
+}
+
+.uwai-more {
+  justify-content: center;
+  width: 22px;
+  padding: 0;
+  border-radius: 0 5px 5px 0;
+  border-left: 1px solid var(--color-accent-divider);
+}
+
+.uwai-main:hover,
+.uwai-more:hover {
+  background: var(--color-accent-hover);
+}
+
+.uwai-main:active,
+.uwai-more:active {
+  background: var(--color-accent-active);
+}
+
+.uwai-main:focus-visible,
+.uwai-more:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Pending count — the reason to press, or the reason not to. */
+.uwai-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 17px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--color-accent-divider);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.uwai-count--empty {
+  opacity: 0.6;
+  font-weight: 600;
+}
+
+/*
+ * Nothing pending. The send half is genuinely disabled — an empty brief asks
+ * the model to rewrite a document nobody marked up — so the control drops its
+ * accent fill and says so. The caret half stays live: an instruction of your
+ * own is a thing worth sending, and it is the way out of this state. The
+ * outline is an inset shadow, not a border, so the swap cannot change the
+ * control's size and nudge the title bar.
+ */
+.uwai-split--empty {
+  background: transparent;
+  color: var(--color-text-muted);
+  box-shadow: inset 0 0 0 1px var(--color-rule);
+}
+
+.uwai-split--empty .uwai-main {
+  cursor: default;
+  opacity: 0.8;
+}
+
+.uwai-split--empty .uwai-main:hover,
+.uwai-split--empty .uwai-main:active {
+  background: transparent;
+}
+
+.uwai-split--empty .uwai-more {
+  border-left-color: var(--color-rule);
+}
+
+.uwai-split--empty .uwai-more:hover {
+  background: var(--color-surface-raised);
+}
+
+.uwai-split--empty .uwai-count {
+  background: var(--color-rule);
+}
+
+/* ── In flight ───────────────────────────────────────────────
+ * Replaces the button in place. Deliberately confined to the title bar: the
+ * document must stay readable and scrollable while the agent works, so nothing
+ * here covers, dims or disables it.
+ */
+
+.uwai-flight {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  padding: 0 6px 0 10px;
+  border: 1px solid var(--color-accent);
+  border-radius: 5px;
+  background: var(--color-control-active);
+  color: var(--color-accent);
+  white-space: nowrap;
+}
+
+.uwai-flight-label {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.uwai-spinner {
+  flex-shrink: 0;
+  animation: uwai-spin 900ms linear infinite;
+  transform-origin: 50% 50%;
+}
+
+@keyframes uwai-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.uwai-cancel {
+  height: 20px;
+  padding: 0 8px;
+  border: 1px solid var(--color-accent);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-accent);
+  font-family: var(--font-chrome);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.uwai-cancel:hover {
+  background: var(--color-control-hover);
+}
+
+.uwai-cancel:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+/* ── Outcome notice ──────────────────────────────────────────
+ * Hangs below the title bar rather than sitting inside it: a server error can
+ * be a sentence, and the title bar's geometry must not depend on its length.
+ */
+
+.uwai-notice {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 6;
+  /*
+   * Grid, not a single flex row: the buttons cannot shrink (they are nowrap),
+   * so in a row they would squeeze the message down to one letter per line.
+   * Here the text owns the width and the actions sit under it.
+   */
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 6px 7px;
+  width: max-content;
+  max-width: 380px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-surface-raised-border);
+  border-radius: 6px;
+  background: var(--color-surface-raised);
+  box-shadow: 0 6px 20px var(--color-shadow);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--color-text);
+  animation: uwai-rise 140ms var(--ribbon-slide-ease);
+}
+
+.uwai-notice-icon {
+  display: flex;
+  flex-shrink: 0;
+  padding-top: 1px;
+}
+
+.uwai-notice-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.uwai-notice--success .uwai-notice-icon {
+  color: var(--color-insertion);
+}
+
+.uwai-notice--error {
+  border-color: var(--color-error);
+}
+
+.uwai-notice--error .uwai-notice-icon {
+  color: var(--color-error);
+}
+
+.uwai-notice-actions {
+  grid-column: 2;
+  display: inline-flex;
+  gap: 4px;
+  justify-self: end;
+}
+
+.uwai-notice-btn {
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--color-rule);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text);
+  font-family: var(--font-chrome);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.uwai-notice-btn:hover {
+  background: var(--color-control-hover);
+  border-color: var(--color-text-muted);
+}
+
+.uwai-notice-btn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+/* ── Instruction popover ─────────────────────────────────────
+ * A panel, not a modal: the document stays visible and usable behind it, and
+ * Escape or a click outside dismisses it. Focus moves in on open and back to
+ * the trigger on close (UpdateWithAI.tsx).
+ */
+
+.uwai-dialog {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 6;
+  width: 340px;
+  padding: 12px;
+  border: 1px solid var(--color-surface-raised-border);
+  border-radius: 8px;
+  background: var(--color-surface-raised);
+  box-shadow: 0 10px 30px var(--color-shadow);
+  text-align: left;
+  animation: uwai-rise 140ms var(--ribbon-slide-ease);
+}
+
+.uwai-dialog-title {
+  margin: 0 0 2px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-heading);
+}
+
+.uwai-dialog-summary {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--color-text-muted);
+}
+
+.uwai-dialog-warning {
+  margin: 0 0 10px;
+  padding: 7px 8px;
+  border: 1px solid var(--color-warning);
+  border-radius: 5px;
+  background: var(--color-warning-bg);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--color-text);
+}
+
+.uwai-dialog-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--color-text);
+}
+
+.uwai-dialog-optional {
+  font-weight: 400;
+  color: var(--color-text-muted);
+}
+
+.uwai-dialog-input {
+  display: block;
+  width: 100%;
+  padding: 7px 8px;
+  border: 1px solid var(--color-rule);
+  border-radius: 5px;
+  background: var(--color-canvas);
+  color: var(--color-text);
+  font-family: var(--font-chrome);
+  font-size: 12px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.uwai-dialog-input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.uwai-dialog-input:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -1px;
+  border-color: var(--color-accent);
+}
+
+.uwai-dialog-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.uwai-dialog-hint {
+  margin-right: auto;
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.uwai-dialog-btn {
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--color-rule);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--color-text);
+  font-family: var(--font-chrome);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.uwai-dialog-btn:hover {
+  background: var(--color-control-hover);
+  border-color: var(--color-text-muted);
+}
+
+.uwai-dialog-btn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.uwai-dialog-btn--primary {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: var(--color-accent-text);
+}
+
+.uwai-dialog-btn--primary:hover {
+  background: var(--color-accent-hover);
+  border-color: var(--color-accent-hover);
+}
+
+.uwai-dialog-btn--primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: var(--color-accent);
+}
+
+@keyframes uwai-rise {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .uwai-spinner {
+    animation: none;
+  }
+
+  .uwai-dialog,
+  .uwai-notice {
+    animation: none;
+  }
+
+  .uwai-main,
+  .uwai-more,
+  .uwai-cancel,
+  .uwai-dialog-btn,
+  .uwai-notice-btn {
+    transition: none;
+  }
+}
