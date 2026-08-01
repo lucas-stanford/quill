@@ -1,8 +1,11 @@
+import { useMemo, useRef } from "react";
 import type { ReactNode } from "react";
 import type { TrackedChangesApi } from "../tracking";
 import type { EditorMode, LoadStatus, SaveState } from "../types";
 import { useTheme } from "../theme";
 import { ReviewBar } from "./ReviewBar";
+import { ribbonVisible } from "./editingFocus";
+import { useEditingFocus } from "./useEditingFocus";
 import "./AppShell.css";
 
 /** FROZEN PROP CONTRACT — the shape may not change; the implementation is yours. */
@@ -15,12 +18,14 @@ export interface AppShellProps {
   /** Autosave lifecycle — surface it quietly, the way Word shows "Saved". */
   saveState?: SaveState;
   /**
-   * The formatting ribbon. Belongs to edit mode only.
+   * The formatting ribbon. Belongs to editing, not merely to edit mode: it is
+   * shown while the caret is in the page (or on the ribbon itself) and slides
+   * away as soon as focus goes elsewhere.
    * It must slide in and out WITHOUT moving the page — animate transform and
    * reserve or overlay its space; never animate height or toggle display.
    */
   toolbar?: ReactNode;
-  /** Edit vs review. Drives ribbon visibility. */
+  /** Edit vs review. Gates the ribbon; actual editing activity reveals it. */
   mode?: EditorMode;
   /** The edit/review control. Render it in the title bar. */
   modeSwitch?: ReactNode;
@@ -51,11 +56,22 @@ export function AppShell({
    * The ribbon stays mounted in both modes and slides on `transform`.
    * Unmounting it (or animating its height) would collapse its space and
    * shove the page up — precisely the jump this must never cause.
+   *
+   * It is shown only while the user is actually editing: edit mode AND the
+   * caret in the page (or on the ribbon acting on it). Selecting Edit and then
+   * reading, or clicking into the comment rail, is not editing, and a
+   * formatting toolbar hanging over the document then is the one thing the
+   * user has asked us most often to stop doing. See useEditingFocus.
    */
-  const ribbonHidden = mode !== "edit";
+  const sheetRef = useRef<HTMLDivElement | null>(null);
+  const ribbonRef = useRef<HTMLDivElement | null>(null);
+  const surfaces = useMemo(() => [sheetRef, ribbonRef], []);
+  const focus = useEditingFocus({ enabled: mode === "edit", surfaces });
+  const editing = ribbonVisible(mode, focus);
+  const ribbonHidden = !editing;
 
   return (
-    <div className="shell" data-mode={mode}>
+    <div className="shell" data-mode={mode} data-editing={editing || undefined}>
       <header className="titlebar">
         <div className="titlebar-brand" aria-label="Quill">
           <QuillNib />
@@ -81,6 +97,7 @@ export function AppShell({
        */}
       <div
         className="ribbon-slot"
+        ref={ribbonRef}
         data-hidden={ribbonHidden || undefined}
         inert={ribbonHidden}
         aria-hidden={ribbonHidden || undefined}
@@ -90,7 +107,7 @@ export function AppShell({
 
       <main className="page-canvas">
         <div className="page-canvas-inner">
-          <div className="page-sheet">
+          <div className="page-sheet" ref={sheetRef}>
             {status === "loading" && <LoadingSkeleton />}
             {status === "error" && (
               <ErrorView error={error ?? "An unexpected error occurred."} />
