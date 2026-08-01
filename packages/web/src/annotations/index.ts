@@ -13,4 +13,13 @@ export {
 export type { AnchorMatch, AnchorStrategy } from "./anchor";
 export { layoutBubbles, layoutHeight, BUBBLE_GAP } from "./layout";
 export type { BubbleBox, BubbleLayout } from "./layout";
+export { SelectionToolbar } from "./SelectionToolbar";
+export type { SelectionToolbarProps } from "./SelectionToolbar";
+export {
+  placeSelectionToolbar,
+  samePlacement,
+  SELECTION_GAP,
+  SELECTION_MARGIN,
+} from "./selectionPlacement";
+export type { Placement, PlacementInput, Rect, SelectionBox } from "./selectionPlacement";
 export { orderComments, mergeRemoteComments, selectForBrief, selectOrphans } from "./select";

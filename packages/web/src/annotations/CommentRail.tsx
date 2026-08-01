@@ -5,6 +5,7 @@ import { readInternal, DRAFT_ID } from "./internal";
 import type { AnnotationsInternal } from "./internal";
 import { layoutBubbles, layoutHeight } from "./layout";
 import type { BubbleBox } from "./layout";
+import { SelectionToolbar } from "./SelectionToolbar";
 import "./annotations.css";
 
 /**
@@ -21,6 +22,11 @@ import "./annotations.css";
  * Orphaned threads drop out of the anchored layout into a tray pinned to the
  * bottom of the rail, keeping their original quote so they can be re-attached
  * or dismissed. Nothing is ever silently lost.
+ *
+ * Starting a comment is NOT the rail's job any more: the action hovers beside
+ * the selected text (SelectionToolbar, portalled out of here) because that is
+ * where the reviewer is looking. The rail still owns the composer, so there is
+ * one comment-creation path — beginDraft() → the draft bubble → addComment().
  */
 
 export interface CommentRailProps {
@@ -70,6 +76,7 @@ function initials(author: string): string {
 
 export function CommentRail({ annotations }: CommentRailProps) {
   const internal = readInternal(annotations);
+  const railRef = useRef<HTMLElement | null>(null);
   const layerRef = useRef<HTMLDivElement | null>(null);
   const bubbleRefs = useRef(new Map<string, HTMLElement>());
   const resizeObserver = useRef<ResizeObserver | null>(null);
@@ -77,6 +84,8 @@ export function CommentRail({ annotations }: CommentRailProps) {
   const [anchorTops, setAnchorTops] = useState<Map<string, number>>(() => new Map());
   const [heights, setHeights] = useState<Map<string, number>>(() => new Map());
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
+  /** Bumped on each created comment, so the floating toolbar can settle. */
+  const [created, setCreated] = useState(0);
 
   const { comments, orphans, activeId } = annotations;
   const geometry = internal?.geometry ?? 0;
@@ -197,7 +206,19 @@ export function CommentRail({ annotations }: CommentRailProps) {
   const hasSelection = (internal?.selectionQuote ?? "").length > 0;
 
   return (
-    <aside className="comment-rail" aria-label="Comments">
+    <aside className="comment-rail" aria-label="Comments" ref={railRef}>
+      {/*
+       * Portalled to <body>: the action belongs beside the words it acts on,
+       * not out here. It calls startDraft — the rail's own entry point — so
+       * the composer, the anchor and the sidecar write are unchanged.
+       */}
+      <SelectionToolbar
+        internal={internal}
+        railRef={railRef}
+        createdTick={created}
+        onComment={startDraft}
+      />
+
       <div
         className="comment-rail-layer"
         ref={layerRef}
@@ -247,13 +268,17 @@ export function CommentRail({ annotations }: CommentRailProps) {
             top={placementById.get(DRAFT_ID)?.top ?? 0}
             author={internal?.author ?? "You"}
             onCancel={() => internal?.cancelDraft()}
-            onSubmit={(body) => annotations.addComment(body)}
+            onSubmit={(body) => {
+              annotations.addComment(body);
+              setCreated((n) => n + 1);
+            }}
           />
         ) : null}
 
         {anchored.length === 0 && !draft ? (
           <p className="comment-rail-empty">
-            Select text in the plan, then <strong>Comment</strong> to leave a margin note.
+            Select text in the plan and a <strong>Comment</strong> button appears beside
+            it — or press ⌘⌥M. Notes land here, level with their text.
           </p>
         ) : null}
       </div>
@@ -268,20 +293,6 @@ export function CommentRail({ annotations }: CommentRailProps) {
       ) : null}
 
       <div className="comment-rail-footer">
-        <button
-          type="button"
-          className="comment-action comment-action--primary"
-          onClick={startDraft}
-          disabled={!hasSelection}
-          title={
-            hasSelection
-              ? "Comment on the selected text (⌘⌥M)"
-              : "Select text in the plan first"
-          }
-        >
-          <CommentGlyph />
-          Comment
-        </button>
         <SyncBadge internal={internal} count={comments.length} />
       </div>
     </aside>
@@ -478,7 +489,11 @@ function Composer({ placeholder, submitLabel, autoFocus, onCancel, onSubmit }: C
   const areaRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
-    if (autoFocus) areaRef.current?.focus();
+    /* preventScroll: the bubble is placed by the rail's own layout pass a frame
+       later, so at focus time it still sits at the top of the rail. Letting the
+       browser scroll it into view would yank the canvas away from the text the
+       comment is about — fatal now that drafting starts at the selection. */
+    if (autoFocus) areaRef.current?.focus({ preventScroll: true });
   }, [autoFocus]);
 
   const submit = () => {
@@ -608,24 +623,6 @@ function SyncBadge({
 }
 
 /* ── Glyphs ─────────────────────────────────────────────────────────────── */
-
-function CommentGlyph() {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 16 16"
-      width="13"
-      height="13"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M2 3.5A1.5 1.5 0 0 1 3.5 2h9A1.5 1.5 0 0 1 14 3.5v6A1.5 1.5 0 0 1 12.5 11H6.5L3 14v-3H3.5A1.5 1.5 0 0 1 2 9.5z" />
-    </svg>
-  );
-}
 
 function UnlinkGlyph() {
   return (
