@@ -110,8 +110,12 @@ interface InFlight {
   unreadableResponse: { text: string; since: number } | null;
 }
 
+/*
+ * Everything here is progress commentary for a human, so it goes to stderr.
+ * stdout is reserved for the single-line ReviewSummary a parent agent parses.
+ */
 const consoleLogger: RevisionLogger = {
-  log: (message) => console.log(message),
+  log: (message) => process.stderr.write(`${message}\n`),
   error: (message) => console.error(message),
 };
 

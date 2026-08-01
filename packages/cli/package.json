@@ -1,18 +1,19 @@
 {
-  "name": "@quill/cli",
+  "name": "quillmd",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "bin": {
     "quill": "./dist/cli.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
   "scripts": {
     "build": "tsup && node ./scripts/copy-web.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "node src/__tests__/run.mjs"
+    "test": "node src/__tests__/run.mjs",
+    "prepack": "node ./scripts/check-package.mjs"
   },
   "dependencies": {
     "open": "^11.0.0"
@@ -21,5 +22,25 @@
     "@types/node": "^24.10.1",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3"
+  },
+  "description": "Review an AI coding agent's plan in a Word-like document instead of terminal scrollback. Comment, mark up, and have the agent revise it.",
+  "keywords": [
+    "plan",
+    "review",
+    "markdown",
+    "editor",
+    "ai",
+    "agent",
+    "copilot",
+    "tracked-changes",
+    "annotations",
+    "cli"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

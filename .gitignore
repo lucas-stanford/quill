@@ -3,3 +3,4 @@ dist/
 *.log
 .DS_Store
 .quill-tmp*
+packages/cli/README.md
