@@ -375,6 +375,16 @@ function tableRows(node: JSONContent): string[][] {
     .map(tableRowCells);
 }
 
+/**
+ * A GFM task checkbox is square brackets, which the inline escaper rightly
+ * escapes anywhere else. At the head of a list item it is a checkbox, and
+ * `- \[ \] do it` is not one — so unescape exactly that leading marker and
+ * nothing else.
+ */
+function unescapeTaskMarker(text: string): string {
+  return text.replace(/^\\\[([ xX])\\\]/, "[$1]");
+}
+
 function serializeListItem(
   item: JSONContent,
   marker: string,
@@ -401,7 +411,7 @@ function serializeListItem(
 
   for (const child of children) {
     if (child.type === "paragraph") {
-      const text = serializeInline(child.content);
+      const text = unescapeTaskMarker(serializeInline(child.content));
       if (firstParagraph) {
         result += `${wrapMarkdown(text, ctx.wrap, indent + bullet, contIndent)}\n`;
         firstParagraph = false;

@@ -196,3 +196,49 @@ describe("the real plan", () => {
     );
   });
 });
+
+describe("task list items", () => {
+  it("survives a rebuild with its checkbox intact", () => {
+    const src = "# T\n\n## Steps\n\n- [ ] first thing\n- [x] second thing\n- plain item\n";
+    const parsed = parseMarkdown(src);
+    // No source map: this is what a rebuilt (edited) list produces.
+    expect(docToMarkdown(parsed.doc)).toBe(src);
+  });
+
+  it("keeps a task item on one line rather than splitting it", () => {
+    const parsed = parseMarkdown("- [ ] do the thing\n");
+    const out = docToMarkdown(parsed.doc);
+    expect(out).not.toMatch(/\n\n/);
+    expect(out.trim()).toBe("- [ ] do the thing");
+  });
+
+  it("never escapes the checkbox into literal brackets", () => {
+    const out = docToMarkdown(parseMarkdown("- [x] done\n").doc);
+    expect(out).not.toContain("\\[");
+  });
+
+  it("handles a checked and unchecked item in one list", () => {
+    const src = "- [ ] a\n- [x] b\n";
+    expect(docToMarkdown(parseMarkdown(src).doc)).toBe(src);
+  });
+
+  it("leaves ordinary bracketed text escaped", () => {
+    const out = docToMarkdown(parseMarkdown("- see [note] here\n").doc);
+    expect(out).toContain("\\[note\\]");
+  });
+
+  it("does not mistake a bracket mid-item for a checkbox", () => {
+    const out = docToMarkdown(parseMarkdown("- do it [ ] now\n").doc);
+    expect(out).toContain("\\[");
+  });
+
+  it("keeps nested task items nested", () => {
+    const src = "- [ ] parent\n  - [x] child\n";
+    expect(docToMarkdown(parseMarkdown(src).doc)).toBe(src);
+  });
+
+  it("preserves task items inside an ordered list", () => {
+    const src = "1. [ ] first\n2. [x] second\n";
+    expect(docToMarkdown(parseMarkdown(src).doc)).toBe(src);
+  });
+});

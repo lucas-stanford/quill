@@ -386,8 +386,37 @@ function parseListItem(item: Tokens.ListItem): JSONContent {
     content.unshift({ type: "paragraph", content: [] });
   }
 
-  return { type: "listItem", content };
+  return { type: "listItem", content: mergeTaskMarker(content) };
 }
+
+/**
+ * GFM task items have no schema node here, so `marked` hands the checkbox back
+ * as its own leading text token and the item ends up as two paragraphs — which
+ * rebuilds a tight `- [ ] do it` into a loose item with the marker stranded on
+ * its own line. Fold the checkbox back into the paragraph that follows it so
+ * the item stays one line and the marker survives an edit as literal text.
+ */
+function mergeTaskMarker(content: JSONContent[]): JSONContent[] {
+  if (content.length < 2) return content;
+
+  const [first, second] = content;
+  if (first.type !== "paragraph" || second.type !== "paragraph") return content;
+
+  const only = first.content;
+  if (!only || only.length !== 1 || only[0].type !== "text") return content;
+  if (!TASK_MARKER.test(only[0].text ?? "")) return content;
+  // A marker that carried emphasis is not a checkbox; leave it alone.
+  if (only[0].marks?.length) return content;
+
+  const marker = (only[0].text ?? "").trimEnd();
+  const rest = second.content ?? [];
+  const merged: JSONContent[] = [{ type: "text", text: `${marker} ` }, ...rest];
+
+  return [{ type: "paragraph", content: merged }, ...content.slice(2)];
+}
+
+/** `[ ]`, `[x]` or `[X]`, optionally followed by the space marked leaves behind. */
+const TASK_MARKER = /^\[[ xX]\]\s*$/;
 
 // ─── Public API ─────────────────────────────────────────────────────────────
 
