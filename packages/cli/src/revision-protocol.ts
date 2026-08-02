@@ -180,6 +180,10 @@ export function validateRevisionBrief(value: unknown, where = "brief"): BriefRes
         readEdit(edit, `${where}.edits[${i}]`),
       ),
     };
+    if (raw.feedback !== undefined && raw.feedback !== null) {
+      const feedback = requireString(raw.feedback, `${where}.feedback`);
+      if (feedback.trim().length > 0) brief.feedback = feedback;
+    }
     if (raw.instruction !== undefined && raw.instruction !== null) {
       const instruction = requireString(raw.instruction, `${where}.instruction`);
       if (instruction.trim().length > 0) brief.instruction = instruction;

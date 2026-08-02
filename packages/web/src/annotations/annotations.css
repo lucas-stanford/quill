@@ -51,25 +51,24 @@
 }
 
 /* ── Rail ───────────────────────────────────────────────────────────────
-   Sized so it works both in M1's flex canvas and in a grid rail column. */
+   The rail's POSITION and WIDTH belong to AppShell.css, which owns the canvas
+   grid. This file styles what is inside it and nothing else.
 
-.comment-rail {
+   That split is load-bearing: `.comment-rail` is AppShell's outer <aside>, and
+   this inner box is its only child. Giving both the same class made every
+   placement rule apply twice — the inner copy re-anchored itself and was
+   offset back out past the right edge of the canvas, which clips under
+   `overflow-x: hidden`, so a comment bubble could not be scrolled back into
+   view at all. One class, one owner. */
+
+.comment-rail-inner {
   position: relative;
-  flex: 0 0 auto;
-  width: 100%;
-  min-width: 236px;
-  max-width: 304px;
   display: flex;
   flex-direction: column;
+  width: 100%;
+  min-width: 0;
   font-family: var(--font-chrome, system-ui, sans-serif);
   color: var(--color-text, #e6e6e6);
-}
-
-@media (max-width: 1240px) {
-  .comment-rail {
-    min-width: 200px;
-    max-width: 236px;
-  }
 }
 
 .comment-rail-layer {
@@ -365,6 +364,56 @@
   margin-top: 8px;
   padding-top: 8px;
   border-top: 1px solid var(--color-comment-border, var(--_qc-border));
+}
+
+/* ── General feedback ───────────────────────────────────────────────────
+   Aligned with the bubbles' left edge (LEADER_GUTTER = 28px) so the rail
+   reads as one column, but deliberately without a leader line: it points at
+   the whole plan, not at a line in it. */
+
+.general-feedback {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 14px 0 0 28px;
+}
+
+.general-feedback-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted, #8a8a8e);
+}
+
+.general-feedback-input {
+  width: 100%;
+  box-sizing: border-box;
+  /*
+   * Fixed height with its own scrollbar. A textarea that grew as you typed
+   * would move the footer under it and, on a narrow window where the rail
+   * overlays the page, change what the rail covers while you are mid-sentence.
+   */
+  height: 76px;
+  resize: none;
+  padding: 8px 9px;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--color-text, #e6e6e6);
+  background: var(--color-comment-bg, var(--_qc-bg));
+  border: 1px solid var(--color-comment-border, var(--_qc-border));
+  border-radius: 6px;
+}
+
+.general-feedback-input::placeholder {
+  color: var(--color-text-muted, #8a8a8e);
+}
+
+.general-feedback-input:focus-visible {
+  outline: none;
+  border-color: var(--color-accent, #4fa3e0);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent, #4fa3e0) 28%, transparent);
 }
 
 /* ── Footer ─────────────────────────────────────────────────────────── */

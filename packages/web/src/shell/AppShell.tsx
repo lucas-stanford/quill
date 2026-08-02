@@ -1,7 +1,7 @@
 import { useMemo, useRef } from "react";
 import type { ReactNode } from "react";
 import type { TrackedChangesApi } from "../tracking";
-import type { EditorMode, LoadStatus, SaveState } from "../types";
+import type { LoadStatus, SaveState } from "../types";
 import { useTheme } from "../theme";
 import { ReviewBar } from "./ReviewBar";
 import { ribbonVisible } from "./editingFocus";
@@ -18,17 +18,13 @@ export interface AppShellProps {
   /** Autosave lifecycle — surface it quietly, the way Word shows "Saved". */
   saveState?: SaveState;
   /**
-   * The formatting ribbon. Belongs to editing, not merely to edit mode: it is
+   * The formatting ribbon. Belongs to editing, and to nothing else: it is
    * shown while the caret is in the page (or on the ribbon itself) and slides
    * away as soon as focus goes elsewhere.
    * It must slide in and out WITHOUT moving the page — animate transform and
    * reserve or overlay its space; never animate height or toggle display.
    */
   toolbar?: ReactNode;
-  /** Edit vs review. Gates the ribbon; actual editing activity reveals it. */
-  mode?: EditorMode;
-  /** The edit/review control. Render it in the title bar. */
-  modeSwitch?: ReactNode;
   /** Comment bubbles, rendered in the right margin beside the page. */
   commentRail?: ReactNode;
   /** Tracked-change controls. M4 surfaces accept/reject from here. */
@@ -47,8 +43,6 @@ export function AppShell({
   error,
   saveState,
   toolbar,
-  mode = "edit",
-  modeSwitch,
   commentRail,
   tracking,
   updateWithAI,
@@ -56,25 +50,25 @@ export function AppShell({
   children,
 }: AppShellProps) {
   /*
-   * The ribbon stays mounted in both modes and slides on `transform`.
-   * Unmounting it (or animating its height) would collapse its space and
-   * shove the page up — precisely the jump this must never cause.
+   * The ribbon stays mounted and slides on `transform`. Unmounting it (or
+   * animating its height) would collapse its space and shove the page up —
+   * precisely the jump this must never cause.
    *
-   * It is shown only while the user is actually editing: edit mode AND the
-   * caret in the page (or on the ribbon acting on it). Selecting Edit and then
-   * reading, or clicking into the comment rail, is not editing, and a
-   * formatting toolbar hanging over the document then is the one thing the
-   * user has asked us most often to stop doing. See useEditingFocus.
+   * It is shown only while the user is actually editing: the caret in the page,
+   * or on the ribbon acting on it. There is no mode to select first — putting
+   * the caret in the text IS the declaration of intent, so reading, or clicking
+   * into the comment rail, leaves no toolbar hanging over the document. See
+   * useEditingFocus.
    */
   const sheetRef = useRef<HTMLDivElement | null>(null);
   const ribbonRef = useRef<HTMLDivElement | null>(null);
   const surfaces = useMemo(() => [sheetRef, ribbonRef], []);
-  const focus = useEditingFocus({ enabled: mode === "edit", surfaces });
-  const editing = ribbonVisible(mode, focus);
+  const focus = useEditingFocus({ enabled: true, surfaces });
+  const editing = ribbonVisible(focus);
   const ribbonHidden = !editing;
 
   return (
-    <div className="shell" data-mode={mode} data-editing={editing || undefined}>
+    <div className="shell" data-editing={editing || undefined}>
       <header className="titlebar">
         <div className="titlebar-brand" aria-label="Quill">
           <QuillNib />
@@ -84,7 +78,6 @@ export function AppShell({
         <div className="titlebar-right">
           {updateWithAI}
           {approveButton}
-          {modeSwitch}
           <div aria-live="polite" aria-atomic="true">
             <StatusBadge status={status} saveState={saveState} />
           </div>

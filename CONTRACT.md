@@ -63,12 +63,14 @@ Frozen signatures are in `approve/useApprove.ts` and `approve/ApproveButton.tsx`
    emits; firing on load is an infinite save loop that corrupts the user's file.
 2. **Untouched blocks round-trip byte-identically.** Typing one character changes exactly
    one line in `PLAN.md`. This has been broken twice and fixed twice; do not regress it.
-3. **The plan file holds no review metadata.** Comments live in `PLAN.quill.json`.
+3. **The plan file holds no review metadata.** Comments and the reviewer's general feedback
+   live in `PLAN.quill.json`.
 4. **The AI's output is never written to the plan by the server.** It returns in
    `RevisionState.markdown` and lands as tracked changes so it can be rejected.
 5. **The formatting ribbon appears only while the user is actively editing.** This is the
-   user's most-repeated piece of feedback. It is hidden on load, hidden in review mode, and
-   hidden when focus leaves the document. Showing it more eagerly is a regression.
+   user's most-repeated piece of feedback. It is hidden on load and hidden when focus leaves
+   the document. There is no longer a mode gating it — the caret is the only signal — so
+   showing it more eagerly is a regression.
 6. **Nothing may move the page.** The ribbon and review bar animate `transform` only.
 
 ## Build and test
@@ -77,7 +79,7 @@ Frozen signatures are in `approve/useApprove.ts` and `approve/ApproveButton.tsx`
 pnpm install
 pnpm typecheck && pnpm build && pnpm test
 ```
-**416 tests pass at head** (134 CLI via node:test, 282 web via vitest). Do not regress them.
+**457 tests pass at head** (157 CLI via node:test, 300 web via vitest). Do not regress them.
 
 ## Definition of done for your lane
 

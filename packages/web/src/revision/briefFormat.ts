@@ -51,7 +51,10 @@ export interface BriefMeasure {
 
 /** Size of a brief, for a caller that wants to warn before sending it. */
 export function measureBrief(brief: RevisionBrief): BriefMeasure {
-  let chars = brief.markdown.length + (brief.instruction?.length ?? 0);
+  let chars =
+    brief.markdown.length +
+    (brief.feedback?.length ?? 0) +
+    (brief.instruction?.length ?? 0);
   for (const comment of brief.comments) {
     chars += comment.quote.length + comment.body.length;
     for (const reply of comment.replies) chars += reply.length;
@@ -66,7 +69,8 @@ export function measureBrief(brief: RevisionBrief): BriefMeasure {
 }
 
 /**
- * True when the brief asks for nothing: no edits, no comments, no note.
+ * True when the brief asks for nothing: no edits, no comments, no standing
+ * feedback, no note.
  *
  * A predicate rather than a `buildBrief` that throws, because the shell builds
  * a brief to count what is pending and must be able to do that on an untouched
@@ -76,6 +80,7 @@ export function isBriefEmpty(brief: RevisionBrief): boolean {
   return (
     brief.comments.length === 0 &&
     brief.edits.length === 0 &&
+    (brief.feedback ?? "").trim() === "" &&
     (brief.instruction ?? "").trim() === ""
   );
 }
@@ -252,6 +257,22 @@ export function formatBriefPrompt(brief: RevisionBrief): string {
         `=== REVIEWER COMMENTS — instructions to apply (${brief.comments.length}) ===`,
         "",
         brief.comments.map(formatComment).join("\n\n"),
+      ].join("\n"),
+    );
+  }
+
+  const feedback = (brief.feedback ?? "").trim();
+  if (feedback) {
+    sections.push(
+      [
+        "=== FEEDBACK ON THE PLAN AS A WHOLE ===",
+        "",
+        "Standing feedback the reviewer left about the plan itself rather than about",
+        "any one sentence — its shape, what is missing, what it is for. Act on it by",
+        "changing the plan's structure and content, not by adding a paragraph that",
+        "talks about the feedback.",
+        "",
+        feedback,
       ].join("\n"),
     );
   }

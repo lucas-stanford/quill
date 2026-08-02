@@ -297,50 +297,12 @@
 }
 
 /*
- * Review mode is about the rail; edit mode is about the text. The difference
- * is carried by opacity alone — anything geometric here would move the page
- * when the mode changes.
+ * The rail is always legible: there is no mode to dim it for. On the narrow
+ * tier it sits ON the page, so it is lifted with a shadow rather than faded —
+ * a translucent bubble over the text it annotates is unreadable, and hiding it
+ * would mean comments you cannot see on exactly the window sizes where the
+ * page is most crowded.
  */
-.shell[data-mode="edit"] .comment-rail {
-  opacity: 0.7;
-  transition: opacity var(--ribbon-slide-duration) var(--ribbon-slide-ease);
-}
-
-.shell[data-mode="edit"] .comment-rail:hover,
-.shell[data-mode="edit"] .comment-rail:focus-within,
-.shell[data-mode="review"] .comment-rail {
-  opacity: 1;
-  transition: opacity var(--ribbon-slide-duration) var(--ribbon-slide-ease);
-}
-
-/*
- * Narrow tier only. There the rail sits ON the page, so a dimmed rail would be
- * translucent bubbles over the text they annotate — unreadable, and in the way
- * of the writing the user came to do. Comments therefore appear only while
- * reviewing. Hiding an overlay moves nothing: it is out of flow, so the page
- * geometry is the same either way (proved alongside the ribbon measurements).
- * `visibility` — not `display` — so it also leaves the tab order and the
- * accessibility tree while parked.
- */
-@media (max-width: 1187.98px) {
-  .shell[data-mode="edit"] .comment-rail,
-  .shell[data-mode="edit"] .comment-rail:hover,
-  .shell[data-mode="edit"] .comment-rail:focus-within {
-    opacity: 0;
-    visibility: hidden;
-    transition:
-      opacity var(--ribbon-slide-duration) var(--ribbon-slide-ease),
-      visibility 0s linear var(--ribbon-slide-duration);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .comment-rail,
-  .shell[data-mode="edit"] .comment-rail,
-  .shell[data-mode="review"] .comment-rail {
-    transition: none;
-  }
-}
 
 /* ── Page sheet (the white document) ───────────────────────── */
 

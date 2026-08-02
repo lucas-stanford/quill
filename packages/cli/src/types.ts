@@ -83,6 +83,12 @@ export type ChangeAuthor = "human" | "ai";
 export interface Sidecar {
   version: 1;
   comments: Comment[];
+  /**
+   * Feedback about the plan as a whole, not anchored to any one sentence.
+   * Omitted when empty so sidecars written before this field round-trip
+   * byte-identically.
+   */
+  feedback?: string;
 }
 
 export const EMPTY_SIDECAR: Sidecar = { version: 1, comments: [] };
@@ -128,6 +134,8 @@ export interface RevisionBrief {
   markdown: string;
   comments: BriefComment[];
   edits: BriefEdit[];
+  /** Standing feedback about the plan as a whole, from the rail's panel. */
+  feedback?: string;
   /** Freeform note from the update dialog. */
   instruction?: string;
 }

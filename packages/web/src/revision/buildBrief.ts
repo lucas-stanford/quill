@@ -53,6 +53,22 @@ function hasInstruction(comment: Comment): boolean {
   return comment.replies.some((reply) => reply.body.trim() !== "");
 }
 
+/**
+ * The ids of the threads this brief would carry — the same selection
+ * `buildComments` makes, so a caller can act on exactly what the agent was
+ * asked to act on and nothing else.
+ *
+ * The round trip uses it to resolve those threads once the revision lands. A
+ * thread with no text in it is not an instruction and is deliberately left
+ * open: nothing was asked, so nothing was answered.
+ */
+export function briefCommentIds(annotations: AnnotationsApi): string[] {
+  return annotations
+    .forBrief()
+    .filter(hasInstruction)
+    .map((comment) => comment.id);
+}
+
 function toBriefComment(comment: Comment): BriefComment {
   const quote = comment.anchor.quote.trim();
   return {
@@ -126,6 +142,9 @@ export function buildBrief(
     comments: buildComments(markdown, annotations),
     edits: buildEdits(markdown, tracking),
   };
+
+  const feedback = (annotations.feedback ?? "").trim();
+  if (feedback !== "") brief.feedback = feedback;
 
   const note = (instruction ?? "").trim();
   if (note !== "") brief.instruction = note;

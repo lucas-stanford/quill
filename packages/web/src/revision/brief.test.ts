@@ -5,6 +5,7 @@ import type { TrackedChange, TrackedChangesApi } from "../tracking";
 import type { Comment, RevisionBrief } from "../types";
 import {
   BRIEF_SOFT_LIMIT_CHARS,
+  briefCommentIds,
   buildBrief,
   formatBriefPrompt,
   isBriefEmpty,
@@ -49,18 +50,23 @@ function comment(overrides: Partial<Comment> & { quote?: string }): Comment {
 }
 
 /** Mirrors useAnnotations: resolved threads never reach the brief, orphans do. */
-function annotationsOf(comments: Comment[]): AnnotationsApi {
+function annotationsOf(comments: Comment[], feedback = ""): AnnotationsApi {
   return {
     comments,
     orphans: comments.filter((c) => c.orphaned === true),
     addComment: () => {},
     addReply: () => {},
     resolve: () => {},
+    resolveMany: () => {},
     remove: () => {},
     activeId: null,
     setActiveId: () => {},
     forBrief: () => selectForBrief(comments),
-    sidecar: { version: 1, comments },
+    feedback,
+    setFeedback: () => {},
+    sidecar: feedback
+      ? { version: 1, comments, feedback }
+      : { version: 1, comments },
   };
 }
 
@@ -95,6 +101,15 @@ function brief(
   markdown = PLAN,
 ): RevisionBrief {
   return buildBrief(markdown, annotationsOf(comments), trackingOf(changes), instruction);
+}
+
+/** A brief built with standing feedback in the rail's panel. */
+function briefWithFeedback(
+  feedback: string,
+  comments: Comment[] = [],
+  changes: TrackedChange[] = [],
+): RevisionBrief {
+  return buildBrief(PLAN, annotationsOf(comments, feedback), trackingOf(changes));
 }
 
 /* ── Comments ──────────────────────────────────────────────────────────── */
@@ -372,15 +387,89 @@ describe("buildBrief — instruction", () => {
   });
 });
 
+describe("buildBrief — general feedback", () => {
+  it("carries the rail's standing feedback, trimmed", () => {
+    expect(briefWithFeedback("  merge M3 into M1  ").feedback).toBe("merge M3 into M1");
+  });
+
+  it("omits the key entirely when the panel is empty or blank", () => {
+    expect("feedback" in briefWithFeedback("")).toBe(false);
+    expect("feedback" in briefWithFeedback("   \n ")).toBe(false);
+  });
+
+  it("feedback on its own is a valid brief — not every objection has a quote", () => {
+    const only = briefWithFeedback("This is three milestones pretending to be one.");
+
+    expect(only.comments).toEqual([]);
+    expect(only.edits).toEqual([]);
+    expect(isBriefEmpty(only)).toBe(false);
+    expect(formatBriefPrompt(only)).toContain("three milestones pretending to be one");
+  });
+
+  it("is its own section of the prompt, distinct from the update-dialog note", () => {
+    const both = buildBrief(
+      PLAN,
+      annotationsOf([], "the plan never says how it deploys"),
+      trackingOf([]),
+      "and shorten the rollback",
+    );
+
+    expect(both.feedback).toBe("the plan never says how it deploys");
+    expect(both.instruction).toBe("and shorten the rollback");
+
+    const prompt = formatBriefPrompt(both);
+    expect(prompt).toContain("=== FEEDBACK ON THE PLAN AS A WHOLE ===");
+    expect(prompt).toContain("=== NOTE FROM THE REVIEWER ===");
+    // One does not overwrite the other: both reach the agent.
+    expect(prompt).toContain("the plan never says how it deploys");
+    expect(prompt).toContain("and shorten the rollback");
+  });
+
+  it("counts toward the brief's measured size", () => {
+    const note = "x".repeat(500);
+
+    expect(measureBrief(briefWithFeedback(note)).chars).toBe(
+      measureBrief(brief()).chars + 500,
+    );
+  });
+});
+
+describe("briefCommentIds", () => {
+  it("is exactly the threads the brief carries, so they can be resolved together", () => {
+    const said = comment({ quote: "Rollback", body: "expand this" });
+    const silent = comment({ quote: "Steps", body: "   " });
+    const settled = comment({ quote: "Kafka", body: "done", resolved: true });
+
+    const ids = briefCommentIds(annotationsOf([said, silent, settled]));
+
+    // The empty thread asked nothing, so nothing answers it; the resolved one
+    // never reaches the agent at all.
+    expect(ids).toEqual([said.id]);
+  });
+
+  it("counts a thread whose instruction is only in a reply", () => {
+    const viaReply = comment({
+      quote: "Rollback",
+      body: "",
+      replies: [
+        { id: "r1", author: "You", body: "actually, drop this section", createdAt: "2026-07-01T00:00:00.000Z" },
+      ],
+    });
+
+    expect(briefCommentIds(annotationsOf([viaReply]))).toEqual([viaReply.id]);
+  });
+});
+
 describe("isBriefEmpty", () => {
   it("is true when the reviewer marked nothing up", () => {
     expect(isBriefEmpty(brief())).toBe(true);
   });
 
-  it("is false for a comment, an edit, or a note alone", () => {
+  it("is false for a comment, an edit, a note, or standing feedback alone", () => {
     expect(isBriefEmpty(brief([comment({ quote: "Rollback", body: "expand" })]))).toBe(false);
     expect(isBriefEmpty(brief([], [change("deletion", "Rollback")]))).toBe(false);
     expect(isBriefEmpty(brief([], [], "shorten it"))).toBe(false);
+    expect(isBriefEmpty(briefWithFeedback("this is the wrong shape"))).toBe(false);
   });
 
   it("is true when every thread was resolved before the brief was built", () => {

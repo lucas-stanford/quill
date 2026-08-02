@@ -77,6 +77,16 @@ function initials(author: string): string {
 export function CommentRail({ annotations }: CommentRailProps) {
   const internal = readInternal(annotations);
   const railRef = useRef<HTMLElement | null>(null);
+  /*
+   * Stable identity, deliberately. An inline `ref={(el) => …}` is a new
+   * function every render, and React detaches a changed callback ref (calling
+   * it with null) BEFORE running child layout effects — so SelectionToolbar,
+   * which is a child and reads this ref to decide whether the composer has
+   * anywhere to open, would see null on every re-render and park itself.
+   */
+  const setRailRef = useCallback((el: HTMLDivElement | null) => {
+    railRef.current = el;
+  }, []);
   const layerRef = useRef<HTMLDivElement | null>(null);
   const bubbleRefs = useRef(new Map<string, HTMLElement>());
   const resizeObserver = useRef<ResizeObserver | null>(null);
@@ -206,7 +216,7 @@ export function CommentRail({ annotations }: CommentRailProps) {
   const hasSelection = (internal?.selectionQuote ?? "").length > 0;
 
   return (
-    <aside className="comment-rail" aria-label="Comments" ref={railRef}>
+    <div className="comment-rail-inner" ref={setRailRef}>
       {/*
        * Portalled to <body>: the action belongs beside the words it acts on,
        * not out here. It calls startDraft — the rail's own entry point — so
@@ -278,7 +288,8 @@ export function CommentRail({ annotations }: CommentRailProps) {
         {anchored.length === 0 && !draft ? (
           <p className="comment-rail-empty">
             Select text in the plan and a <strong>Comment</strong> button appears beside
-            it — or press ⌘⌥M. Notes land here, level with their text.
+            it — or press ⌘⌥M. Notes land here, level with their text. For anything
+            about the plan as a whole, use <strong>Feedback on the plan</strong> below.
           </p>
         ) : null}
       </div>
@@ -292,10 +303,55 @@ export function CommentRail({ annotations }: CommentRailProps) {
         />
       ) : null}
 
+      {/*
+       * Below the bubble layer, never above it. Anchor tops are measured from
+       * the layer's own top edge (useAnnotations.measure), so anything stacked
+       * on top of it would shift that origin and every bubble would sit lower
+       * than the text it points at.
+       */}
+      <GeneralFeedback value={annotations.feedback} onChange={annotations.setFeedback} />
+
       <div className="comment-rail-footer">
         <SyncBadge internal={internal} count={comments.length} />
       </div>
-    </aside>
+    </div>
+  );
+}
+
+/* ── General feedback ─────────────────────────────────────────────────────
+   The notes that are not about any one sentence.
+
+   Not every objection has a quote to hang on. "This is three milestones, not
+   one" or "you never say how it deploys" is about the shape of the plan, and
+   forcing it onto an arbitrary paragraph makes it read as a local nitpick —
+   the agent then rewrites that paragraph instead of the plan. So this is a
+   first-class field: it persists in the sidecar beside the comments and goes
+   to the agent as its own section of the brief.
+
+   It sits BELOW the bubble layer on purpose; see the call site. */
+
+interface GeneralFeedbackProps {
+  value: string;
+  onChange: (value: string) => void;
+}
+
+function GeneralFeedback({ value, onChange }: GeneralFeedbackProps) {
+  const id = "quill-general-feedback";
+  return (
+    <section className="general-feedback" aria-labelledby={`${id}-label`}>
+      <label className="general-feedback-label" id={`${id}-label`} htmlFor={id}>
+        Feedback on the plan
+      </label>
+      <textarea
+        id={id}
+        className="general-feedback-input"
+        value={value}
+        placeholder="Anything about the plan as a whole — its shape, what is missing, what it is for."
+        onChange={(event) => onChange(event.target.value)}
+        rows={3}
+        spellCheck
+      />
+    </section>
   );
 }
 

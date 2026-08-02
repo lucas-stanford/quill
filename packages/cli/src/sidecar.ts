@@ -164,7 +164,19 @@ export function validateSidecar(value: unknown, where = "sidecar"): SidecarParse
       readComment(comment, `${where}.comments[${i}]`),
     );
 
-    return { ok: true, sidecar: { version: SIDECAR_VERSION, comments } };
+    const sidecar: Sidecar = { version: SIDECAR_VERSION, comments };
+
+    /*
+     * Empty and absent are the same state, and only one of them may reach the
+     * file: an empty string here would rewrite every sidecar written before
+     * this field existed, for no change the reviewer made.
+     */
+    if (raw.feedback !== undefined && raw.feedback !== null) {
+      const feedback = requireString(raw.feedback, `${where}.feedback`);
+      if (feedback.trim().length > 0) sidecar.feedback = feedback;
+    }
+
+    return { ok: true, sidecar };
   } catch (err) {
     if (err instanceof ShapeError) return { ok: false, problem: "shape", reason: err.message };
     throw err;

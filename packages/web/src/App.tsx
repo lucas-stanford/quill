@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppShell, ModeSwitch, Ribbon } from "./shell";
+import { AppShell, Ribbon } from "./shell";
 import { PlanEditor, usePlanEditor } from "./editor";
 import { useLivePlan } from "./live";
 import { useAnnotations, CommentRail } from "./annotations";
@@ -7,7 +7,7 @@ import { useTrackedChanges } from "./tracking";
 import { useRevision, UpdateWithAI } from "./revision";
 import { useApprove, ApproveButton } from "./approve";
 import { ConflictError, fetchPlan, savePlan } from "./api";
-import type { EditorMode, LoadStatus, PlanResponse, SaveState } from "./types";
+import type { LoadStatus, PlanResponse, SaveState } from "./types";
 
 /**
  * FROZEN WIRING — see CONTRACT.md. This file joins the parallel workstreams;
@@ -26,12 +26,6 @@ export default function App() {
   const [status, setStatus] = useState<LoadStatus>("loading");
   const [error, setError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
-  /**
-   * Review, not edit. Quill is a review surface first: opening a plan should
-   * present a clean page, never a toolbar you did not ask for. The ribbon
-   * appears only once the reviewer is actually editing.
-   */
-  const [mode, setMode] = useState<EditorMode>("review");
 
   const revisionRef = useRef("");
   const pendingRef = useRef<string | null>(null);
@@ -165,8 +159,6 @@ export default function App() {
       status={status}
       error={error}
       saveState={saveState}
-      mode={mode}
-      modeSwitch={status === "ready" ? <ModeSwitch mode={mode} onChange={setMode} /> : null}
       toolbar={status === "ready" ? <Ribbon editor={editor} /> : null}
       commentRail={
         status === "ready" ? <CommentRail annotations={annotations} /> : null

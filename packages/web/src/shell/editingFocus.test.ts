@@ -104,20 +104,20 @@ describe("nextEditingFocus", () => {
 });
 
 describe("ribbonVisible", () => {
-  it("is false in review mode however focused the page is", () => {
-    expect(ribbonVisible("review", { active: true, leaving: false })).toBe(false);
+  it("is false until the user is actually editing", () => {
+    expect(ribbonVisible(EDITING_FOCUS_IDLE)).toBe(false);
   });
 
-  it("is false in edit mode until the user is actually editing", () => {
-    expect(ribbonVisible("edit", EDITING_FOCUS_IDLE)).toBe(false);
-  });
-
-  it("is true only for edit mode with the caret in the surface", () => {
-    expect(ribbonVisible("edit", { active: true, leaving: false })).toBe(true);
+  it("is true with the caret in the surface, with no mode to select first", () => {
+    expect(ribbonVisible({ active: true, leaving: false })).toBe(true);
   });
 
   it("stays visible while a departure is pending — that is what stops the strobe", () => {
-    expect(ribbonVisible("edit", { active: true, leaving: true })).toBe(true);
+    expect(ribbonVisible({ active: true, leaving: true })).toBe(true);
+  });
+
+  it("tracks `active` alone, so focus is the only input", () => {
+    expect(ribbonVisible({ active: false, leaving: true })).toBe(false);
   });
 });
 

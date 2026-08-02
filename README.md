@@ -17,14 +17,19 @@ quill PLAN.md          # opens the plan in your browser, blocks until you are do
 
 1. The plan opens as a page — grey field, white sheet, real margins, dark by default.
 2. Select a phrase; a **Comment** button appears beside it. Leave a margin note.
-3. Switch to **Edit** and strike a paragraph you disagree with.
-4. Press **Update with AI**. Your comments and edits become a brief, the agent rewrites the
-   plan, and the rewrite comes back as **tracked changes** — accept or reject each one.
-5. Press **Approve**. The CLI exits, optionally turning the plan into a ticket board first.
+3. Click into the text and strike a paragraph you disagree with. There is no edit mode to
+   turn on — the formatting ribbon follows your caret and leaves when it does.
+4. For anything the plan gets wrong as a whole, use **Feedback on the plan** in the margin.
+   Not every objection has a sentence to hang on.
+5. Press **Update with AI**. Your comments, edits and feedback become a brief, the agent
+   rewrites the plan, and the rewrite comes back as **tracked changes** — accept or reject
+   each one. The comments it was asked to act on are resolved for you; reopen any you
+   disagree with.
+6. Press **Approve**. The CLI exits, optionally turning the plan into a ticket board first.
 
-`PLAN.md` stays clean markdown the whole time. Comments and threads live in a
-`PLAN.quill.json` sidecar, so the plan file is never polluted with review metadata and every
-`git diff` stays readable. Editing one sentence changes one line.
+`PLAN.md` stays clean markdown the whole time. Comments, threads and your general feedback
+live in a `PLAN.quill.json` sidecar, so the plan file is never polluted with review metadata
+and every `git diff` stays readable. Editing one sentence changes one line.
 
 ## Install
 
@@ -136,7 +141,7 @@ The handoff is optional. A missing `fer` is reported, never fatal.
 | Path | |
 |---|---|
 | `PLAN.md` | your plan — clean, diffable markdown, the source of truth |
-| `PLAN.quill.json` | comments and threads, anchored by quoted text |
+| `PLAN.quill.json` | comments and threads (anchored by quoted text), plus your general feedback |
 | `.quill/` | transient revision request/response, attached mode only |
 
 Comments are anchored by the text they quote plus surrounding context, never by offsets, so
@@ -149,7 +154,7 @@ sentence.
 ```bash
 pnpm install
 pnpm build          # web bundle, then the CLI that embeds it
-pnpm test           # 446 tests
+pnpm test           # 457 tests
 pnpm typecheck
 ```
 

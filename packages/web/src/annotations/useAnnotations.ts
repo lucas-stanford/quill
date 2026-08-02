@@ -53,12 +53,20 @@ export interface AnnotationsApi {
   addComment: (body: string) => void;
   addReply: (commentId: string, body: string) => void;
   resolve: (commentId: string, resolved: boolean) => void;
+  /**
+   * Resolve several threads at once — what the AI round trip uses to close the
+   * notes it was just asked to act on, in one state update and one save.
+   */
+  resolveMany: (commentIds: readonly string[], resolved: boolean) => void;
   remove: (commentId: string) => void;
   /** Currently focused thread, for two-way highlight with the text. */
   activeId: string | null;
   setActiveId: (id: string | null) => void;
   /** Unresolved comments, in document order — the M4 revision brief uses this. */
   forBrief: () => Comment[];
+  /** Standing feedback about the plan as a whole. Persisted in the sidecar. */
+  feedback: string;
+  setFeedback: (feedback: string) => void;
   sidecar: Sidecar;
 }
 
@@ -101,6 +109,22 @@ function isComment(value: unknown): value is Comment {
     typeof c.anchor === "object" &&
     typeof (c.anchor as TextAnchor).quote === "string"
   );
+}
+
+/** The sidecar is a file on disk a human can edit — never trust its shape. */
+function readFeedback(sidecar: Sidecar | undefined | null): string {
+  return typeof sidecar?.feedback === "string" ? sidecar.feedback : "";
+}
+
+/**
+ * The sidecar exactly as it should land on disk. `feedback` is omitted when
+ * empty so a plan reviewed before the panel existed is not rewritten by merely
+ * being opened — the save effect compares this JSON against what was read.
+ */
+function buildSidecar(comments: readonly Comment[], feedback: string): Sidecar {
+  const sidecar: Sidecar = { version: 1, comments: [...comments] };
+  if (feedback.trim() !== "") sidecar.feedback = feedback;
+  return sidecar;
 }
 
 /** The sidecar is a file on disk a human can edit — never trust its shape. */
@@ -174,6 +198,7 @@ function scrollParent(el: HTMLElement | null): HTMLElement | null {
 
 export function useAnnotations({ editor, enabled }: UseAnnotationsOptions): AnnotationsApi {
   const [comments, setComments] = useState<Comment[]>([]);
+  const [feedback, setFeedbackState] = useState("");
   const [resolutions, setResolutions] = useState<Resolutions>({});
   const [activeId, setActiveIdState] = useState<string | null>(null);
   const [draft, setDraft] = useState<DraftAnchor | null>(null);
@@ -357,11 +382,13 @@ export function useAnnotations({ editor, enabled }: UseAnnotationsOptions): Anno
       .then((response) => {
         if (cancelled) return;
         const loaded = sanitizeSidecar(response.sidecar);
+        const loadedFeedback = readFeedback(response.sidecar);
         revisionRef.current = response.revision;
-        savedJsonRef.current = JSON.stringify({ version: 1, comments: loaded } satisfies Sidecar);
+        savedJsonRef.current = JSON.stringify(buildSidecar(loaded, loadedFeedback));
         loadedRef.current = true;
         loadAttemptedRef.current = true;
         setComments(loaded);
+        setFeedbackState(loadedFeedback);
         setSync("idle");
         setSyncDetail(null);
       })
@@ -385,16 +412,29 @@ export function useAnnotations({ editor, enabled }: UseAnnotationsOptions): Anno
    * true when it did, in which case the write is abandoned: the save effect
    * runs again with the union instead of clobbering the file.
    */
-  const adoptRemote = useCallback((remote: Sidecar, local: readonly Comment[]): boolean => {
-    const onDisk = sanitizeSidecar(remote);
-    const merged = mergeRemoteComments(onDisk, local, deletedRef.current);
-    if (!merged) return false;
-    savedJsonRef.current = JSON.stringify({ version: 1, comments: onDisk } satisfies Sidecar);
-    setComments(merged);
-    setSync("idle");
-    setSyncDetail(null);
-    return true;
-  }, []);
+  const adoptRemote = useCallback(
+    (remote: Sidecar, local: readonly Comment[], localFeedback: string): boolean => {
+      const onDisk = sanitizeSidecar(remote);
+      const diskFeedback = readFeedback(remote);
+      const merged = mergeRemoteComments(onDisk, local, deletedRef.current);
+      /*
+       * Standing feedback is a single field, so it cannot be merged the way a
+       * list of threads can. What is on screen wins — this is a one-reviewer
+       * product — except when there is nothing on screen to lose, which is how
+       * feedback written before this session is picked up rather than erased.
+       */
+      const takeFeedback = localFeedback.trim() === "" && diskFeedback.trim() !== "";
+      if (!merged && !takeFeedback) return false;
+
+      savedJsonRef.current = JSON.stringify(buildSidecar(onDisk, diskFeedback));
+      if (merged) setComments(merged);
+      if (takeFeedback) setFeedbackState(diskFeedback);
+      setSync("idle");
+      setSyncDetail(null);
+      return true;
+    },
+    [],
+  );
 
   const persist = useCallback(async (next: Sidecar, json: string) => {
     setSync("saving");
@@ -405,7 +445,7 @@ export function useAnnotations({ editor, enabled }: UseAnnotationsOptions): Anno
         const current = await fetchAnnotations();
         revisionRef.current = current.revision;
         loadedRef.current = true;
-        if (adoptRemote(current.sidecar, next.comments)) return;
+        if (adoptRemote(current.sidecar, next.comments, next.feedback ?? "")) return;
       }
       const saved = await saveAnnotations(next, revisionRef.current);
       revisionRef.current = saved.revision;
@@ -420,7 +460,7 @@ export function useAnnotations({ editor, enabled }: UseAnnotationsOptions): Anno
         const current = await fetchAnnotations();
         revisionRef.current = current.revision;
         loadedRef.current = true;
-        if (adoptRemote(current.sidecar, next.comments)) return;
+        if (adoptRemote(current.sidecar, next.comments, next.feedback ?? "")) return;
         const saved = await saveAnnotations(next, revisionRef.current);
         revisionRef.current = saved.revision;
         savedJsonRef.current = json;
@@ -434,7 +474,10 @@ export function useAnnotations({ editor, enabled }: UseAnnotationsOptions): Anno
     }
   }, [adoptRemote]);
 
-  const sidecar = useMemo<Sidecar>(() => ({ version: 1, comments }), [comments]);
+  const sidecar = useMemo<Sidecar>(
+    () => buildSidecar(comments, feedback),
+    [comments, feedback],
+  );
 
   useEffect(() => {
     if (!enabled) return;
@@ -504,6 +547,26 @@ export function useAnnotations({ editor, enabled }: UseAnnotationsOptions): Anno
 
   const resolve = useCallback((commentId: string, resolved: boolean) => {
     setComments((prev) => prev.map((c) => (c.id === commentId ? { ...c, resolved } : c)));
+  }, []);
+
+  const resolveMany = useCallback((commentIds: readonly string[], resolved: boolean) => {
+    if (commentIds.length === 0) return;
+    const wanted = new Set(commentIds);
+    setComments((prev) => {
+      let changed = false;
+      const next = prev.map((c) => {
+        if (!wanted.has(c.id) || c.resolved === resolved) return c;
+        changed = true;
+        return { ...c, resolved };
+      });
+      // Same array when nothing moved, so a no-op cannot dirty the sidecar and
+      // trigger a save of bytes that already match the file.
+      return changed ? next : prev;
+    });
+  }, []);
+
+  const setFeedback = useCallback((next: string) => {
+    setFeedbackState(next);
   }, []);
 
   const remove = useCallback((commentId: string) => {
@@ -661,10 +724,13 @@ export function useAnnotations({ editor, enabled }: UseAnnotationsOptions): Anno
     addComment,
     addReply,
     resolve,
+    resolveMany,
     remove,
     activeId,
     setActiveId,
     forBrief,
+    feedback,
+    setFeedback,
     sidecar,
   };
 

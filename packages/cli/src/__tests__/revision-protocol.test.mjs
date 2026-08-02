@@ -141,6 +141,37 @@ describe("validateRevisionBrief", () => {
     assert.equal("instruction" in result.brief, false);
   });
 
+  it("carries general feedback through to the queue file", () => {
+    // The validated brief is what a parent agent reads out of
+    // .quill/revision-request.json, so a field dropped here is a field the
+    // reviewer typed and the agent never sees.
+    const result = validateRevisionBrief({
+      markdown: "x",
+      feedback: "This is three milestones pretending to be one.",
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.brief.feedback, "This is three milestones pretending to be one.");
+  });
+
+  it("keeps feedback and instruction as separate fields", () => {
+    const result = validateRevisionBrief({
+      markdown: "x",
+      feedback: "standing",
+      instruction: "one-off",
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.brief.feedback, "standing");
+    assert.equal(result.brief.instruction, "one-off");
+  });
+
+  it("drops whitespace-only feedback", () => {
+    const result = validateRevisionBrief({ markdown: "x", feedback: "  \n " });
+    assert.equal(result.ok, true);
+    assert.equal("feedback" in result.brief, false);
+  });
+
   it("names the offending field, because a human debugs against this", () => {
     const cases = [
       [{ markdown: "x", comments: {} }, /brief\.comments must be an array/],
@@ -152,6 +183,7 @@ describe("validateRevisionBrief", () => {
       [{ markdown: "x", edits: [{ kind: "moved", text: "x" }] }, /must be "insertion" or "deletion"/],
       [{ markdown: "x", edits: [{ kind: "insertion", context: 7 }] }, /edits\[0\]\.context must be a string/],
       [{ markdown: "x", instruction: 3 }, /brief\.instruction must be a string/],
+      [{ markdown: "x", feedback: 3 }, /brief\.feedback must be a string/],
     ];
     for (const [value, pattern] of cases) {
       const result = validateRevisionBrief(value);

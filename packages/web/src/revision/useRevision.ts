@@ -4,6 +4,7 @@ import type { TrackedChangesApi } from "../tracking";
 import type { RevisionState, RevisionStatus } from "../types";
 import { cancelRevision, fetchRevision, requestRevision } from "../api";
 import { composeBrief, renderPrompt, withInstruction } from "./compose";
+import { briefCommentIds } from "./buildBrief";
 import { decideApply } from "./applyPlan";
 import { runRevision, timerDelay } from "./runner";
 import { NOTHING_TO_SEND, transportFailure } from "./status";
@@ -90,6 +91,15 @@ export function useRevision({
   /** Id of the revision already in the document; guards against a double apply. */
   const appliedIdRef = useRef<string | null>(null);
   const aliveRef = useRef(true);
+  /** Live handle for the async loop, which outlives the render that started it. */
+  const annotationsRef = useRef(annotations);
+  annotationsRef.current = annotations;
+  /**
+   * The threads that went out with the request in flight. They are answered by
+   * the revision that comes back, so they are resolved when it lands — see
+   * `land`.
+   */
+  const sentCommentIdsRef = useRef<string[]>([]);
 
   /**
    * The brief as it stands. Rebuilt when — and only when — the plan, the
@@ -162,6 +172,20 @@ export function useRevision({
       }
       changes.applyRevision(decision.markdown);
       appliedIdRef.current = state.id;
+      /*
+       * The notes that went out have now been answered: the reply is the
+       * rewrite sitting on screen as tracked changes. Leaving them open would
+       * mean the reviewer has to close by hand every comment the agent already
+       * acted on, and `openComments` in the exit summary would report work
+       * outstanding that is not.
+       *
+       * Resolved is not the same as accepted. The tracked changes are still
+       * there to walk, and a thread the reviewer disagrees with reopens with
+       * one click — which is the point of resolving them here rather than
+       * deleting them.
+       */
+      annotationsRef.current.resolveMany(sentCommentIdsRef.current, true);
+      sentCommentIdsRef.current = [];
       settle("done", null);
     },
     [settle],
@@ -183,6 +207,7 @@ export function useRevision({
       }
 
       baselineRef.current = markdownRef.current;
+      sentCommentIdsRef.current = briefCommentIds(annotationsRef.current);
       const controller = new AbortController();
       abortRef.current = controller;
       settle("queued", null);

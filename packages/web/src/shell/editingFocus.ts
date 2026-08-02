@@ -1,5 +1,3 @@
-import type { EditorMode } from "../types";
-
 /**
  * How long focus may sit outside the editing surface before the ribbon leaves.
  *
@@ -26,7 +24,7 @@ export type EditingSignal =
   | { type: "leave" }
   /** The hide delay expired. */
   | { type: "settle" }
-  /** Edit mode ended, or the surface went away. Immediate, no grace period. */
+  /** The surface went away. Immediate, no grace period. */
   | { type: "reset" };
 
 export interface EditingFocus {
@@ -71,11 +69,15 @@ export function nextEditingFocus(prev: EditingFocus, signal: EditingSignal): Edi
 }
 
 /**
- * The ribbon belongs to edit mode *and* to actual editing. Selecting Edit and
- * then reading, or clicking into the comment rail, is not editing — and the
- * user has been clear that a toolbar hanging over the document then is the
- * thing they do not want.
+ * The ribbon belongs to actual editing, and to nothing else.
+ *
+ * There is no mode to consult: a mode is a setting the user has to remember to
+ * change, and asking someone to declare an intention they have already
+ * expressed by putting the caret in the text is the switch this app used to
+ * have and no longer does. The caret IS the signal — the ribbon is here while
+ * the page (or the ribbon acting on it) holds focus, and gone the moment focus
+ * is anywhere else.
  */
-export function ribbonVisible(mode: EditorMode, focus: EditingFocus): boolean {
-  return mode === "edit" && focus.active;
+export function ribbonVisible(focus: EditingFocus): boolean {
+  return focus.active;
 }

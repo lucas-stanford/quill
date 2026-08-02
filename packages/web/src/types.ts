@@ -102,6 +102,13 @@ export type ChangeAuthor = "human" | "ai";
 export interface Sidecar {
   version: 1;
   comments: Comment[];
+  /**
+   * Feedback about the plan as a whole — the notes that are not about any one
+   * sentence ("this is three milestones, not one", "you never say how it is
+   * deployed"). Omitted entirely when empty, so a sidecar written before this
+   * field existed round-trips byte-identically.
+   */
+  feedback?: string;
 }
 
 export const EMPTY_SIDECAR: Sidecar = { version: 1, comments: [] };
@@ -117,12 +124,6 @@ export interface SaveAnnotationsRequest {
   sidecar: Sidecar;
   revision: string;
 }
-
-/**
- * Editing versus reviewing are different activities. The formatting ribbon
- * belongs to edit mode only; review mode is for annotating and commenting.
- */
-export type EditorMode = "edit" | "review";
 
 /* ── M4: the AI round-trip ────────────────────────────────────────────────
    Review markup becomes a revision brief; the agent rewrites the plan; the
@@ -153,6 +154,8 @@ export interface RevisionBrief {
   markdown: string;
   comments: BriefComment[];
   edits: BriefEdit[];
+  /** Standing feedback about the plan as a whole, from the rail's panel. */
+  feedback?: string;
   /** Freeform note from the update dialog. */
   instruction?: string;
 }

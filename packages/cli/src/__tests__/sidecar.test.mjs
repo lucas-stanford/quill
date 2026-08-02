@@ -228,6 +228,55 @@ describe("validateSidecar", () => {
   });
 });
 
+describe("validateSidecar — general feedback", () => {
+  it("keeps feedback about the plan as a whole", () => {
+    const result = validateSidecar({
+      version: 1,
+      comments: [],
+      feedback: "Five milestones is too many.",
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.sidecar.feedback, "Five milestones is too many.");
+  });
+
+  it("survives the round trip through the canonical serialization", () => {
+    const written = serializeSidecar(
+      validateSidecar({ version: 1, comments: [], feedback: "merge M3 into M1" }).sidecar,
+    );
+    const read = parseSidecar(written);
+
+    assert.equal(read.ok, true);
+    assert.equal(read.sidecar.feedback, "merge M3 into M1");
+  });
+
+  it("drops empty or whitespace-only feedback rather than writing it", () => {
+    // Absent and empty are the same state; writing "" would rewrite every
+    // sidecar authored before this field existed, for no change the reviewer
+    // made. The key must not appear at all.
+    for (const feedback of ["", "   \n\t "]) {
+      const result = validateSidecar({ version: 1, comments: [], feedback });
+      assert.equal(result.ok, true);
+      assert.equal("feedback" in result.sidecar, false);
+    }
+  });
+
+  it("a sidecar with no feedback key round-trips byte-identically", () => {
+    const before = serializeSidecar({ version: 1, comments: [comment()] });
+    const after = serializeSidecar(parseSidecar(before).sidecar);
+
+    assert.equal(after, before);
+  });
+
+  it("rejects feedback that is not a string, naming the field", () => {
+    for (const feedback of [42, true, [], {}]) {
+      const result = validateSidecar({ version: 1, comments: [], feedback });
+      assert.equal(result.ok, false);
+      assert.match(result.reason, /feedback/);
+    }
+  });
+});
+
 describe("parseSidecar", () => {
   it("reports invalid JSON as a syntax problem", () => {
     const result = parseSidecar("{ this is not json");
