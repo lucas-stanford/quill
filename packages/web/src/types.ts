@@ -125,6 +125,29 @@ export interface SaveAnnotationsRequest {
   revision: string;
 }
 
+/* ── Companion documents ──────────────────────────────────────────────────
+   Read-only reading material shown beside the plan: the research that backs
+   it and the reference an implementer works from. */
+
+export interface CompanionSummary {
+  /** File name, e.g. "research.md". The id the read endpoint takes. */
+  name: string;
+  /** Display label, e.g. "Research". */
+  label: string;
+  /** Absolute path on disk. */
+  path: string;
+}
+
+/** GET /api/companions */
+export interface CompanionList {
+  documents: CompanionSummary[];
+}
+
+/** GET /api/companions/:name */
+export interface CompanionDocument extends CompanionSummary {
+  markdown: string;
+}
+
 /* ── M4: the AI round-trip ────────────────────────────────────────────────
    Review markup becomes a revision brief; the agent rewrites the plan; the
    rewrite comes back as tracked changes so a bad revision is one click from

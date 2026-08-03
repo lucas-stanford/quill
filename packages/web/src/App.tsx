@@ -6,6 +6,7 @@ import { useAnnotations, CommentRail } from "./annotations";
 import { useTrackedChanges } from "./tracking";
 import { useRevision, UpdateWithAI } from "./revision";
 import { useApprove, ApproveButton } from "./approve";
+import { useCompanions, CompanionDrawer, CompanionTabs } from "./companions";
 import { ConflictError, fetchPlan, savePlan } from "./api";
 import type { LoadStatus, PlanResponse, SaveState } from "./types";
 
@@ -117,6 +118,8 @@ export default function App() {
 
   const approve = useApprove({ enabled: status === "ready", annotations, tracking });
 
+  const companions = useCompanions(status === "ready");
+
   useLivePlan({
     enabled: status === "ready",
     onChanged: ({ revision }) => {
@@ -165,6 +168,10 @@ export default function App() {
       }
       tracking={status === "ready" ? tracking : undefined}
       approveButton={status === "ready" ? <ApproveButton approve={approve} /> : null}
+      companionTabs={
+        status === "ready" ? <CompanionTabs companions={companions} /> : null
+      }
+      companionDrawer={<CompanionDrawer companions={companions} />}
       updateWithAI={
         status === "ready" ? (
           <UpdateWithAI

@@ -119,6 +119,20 @@ The default. Quill runs `copilot -p <prompt>` itself, spawned with an argument a
 than a shell string. The model's output is **never written to your plan** — it returns to
 the browser as tracked changes, so a bad rewrite is one click from being undone.
 
+## Companion documents
+
+A plan is an argument, and an argument is only reviewable next to its evidence. If a
+`research.md` or a `reference.md` sits beside the plan, Quill offers it as a button in the
+title bar and opens it as a read-only reading pane over the document.
+
+They are read-only on purpose: the plan is the artifact that becomes tickets and the only
+thing the exit protocol reports on. They are also re-read every time you open one, so an
+agent that is still writing its research while you review the plan is never showing you a
+stale page. Opening one never touches the plan — the editor underneath keeps its pending
+tracked changes and comment anchors, so a glance at the research costs nothing.
+
+`Esc` or a click outside closes it.
+
 ## Handoff to ferricket
 
 A plan's job is to become work. If [ferricket](https://github.com/prabirshrestha/ferricket)
@@ -142,6 +156,7 @@ The handoff is optional. A missing `fer` is reported, never fatal.
 |---|---|
 | `PLAN.md` | your plan — clean, diffable markdown, the source of truth |
 | `PLAN.quill.json` | comments and threads (anchored by quoted text), plus your general feedback |
+| `research.md`, `reference.md` | optional companions — read-only tabs beside the plan |
 | `.quill/` | transient revision request/response, attached mode only |
 
 Comments are anchored by the text they quote plus surrounding context, never by offsets, so
@@ -154,7 +169,7 @@ sentence.
 ```bash
 pnpm install
 pnpm build          # web bundle, then the CLI that embeds it
-pnpm test           # 457 tests
+pnpm test           # 470 tests
 pnpm typecheck
 ```
 

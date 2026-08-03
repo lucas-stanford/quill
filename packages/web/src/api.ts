@@ -1,5 +1,7 @@
 import type {
   AnnotationsResponse,
+  CompanionDocument,
+  CompanionList,
   ConflictResponse,
   PlanResponse,
   RevisionBrief,
@@ -122,4 +124,25 @@ export async function finishReview(
   });
   if (!res.ok) throw new Error(await errorMessage(res, `Failed to finish the review (${res.status})`));
   return (await res.json()) as ReviewSummary;
+}
+
+/* ── Companion documents ─────────────────────────────────────────────────
+   Read-only, so there is no revision, no save and no conflict to handle. */
+
+/** The companions that exist beside the plan right now. */
+export async function fetchCompanions(): Promise<CompanionList> {
+  const res = await fetch("/api/companions");
+  if (!res.ok) {
+    throw new Error(await errorMessage(res, `Failed to list companions (${res.status})`));
+  }
+  return (await res.json()) as CompanionList;
+}
+
+/** One companion's current contents. Re-read on every open, never cached. */
+export async function fetchCompanion(name: string): Promise<CompanionDocument> {
+  const res = await fetch(`/api/companions/${encodeURIComponent(name)}`);
+  if (!res.ok) {
+    throw new Error(await errorMessage(res, `Failed to load ${name} (${res.status})`));
+  }
+  return (await res.json()) as CompanionDocument;
 }

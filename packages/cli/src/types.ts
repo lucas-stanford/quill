@@ -15,6 +15,30 @@ export interface PlanResponse {
   revision: string;
 }
 
+/* ── Companion documents ──────────────────────────────────────────────────
+   Read-only reading material shown beside the plan: the research that backs
+   it and the reference an implementer works from. See companions.ts. */
+
+/** One companion, as listed in the tab strip. */
+export interface CompanionSummary {
+  /** File name, e.g. "research.md". The id the read endpoint takes. */
+  name: string;
+  /** Display label, e.g. "Research". */
+  label: string;
+  /** Absolute path on disk. */
+  path: string;
+}
+
+/** GET /api/companions */
+export interface CompanionList {
+  documents: CompanionSummary[];
+}
+
+/** GET /api/companions/:name */
+export interface CompanionDocument extends CompanionSummary {
+  markdown: string;
+}
+
 export interface ErrorResponse {
   error: string;
 }

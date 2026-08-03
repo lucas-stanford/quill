@@ -33,6 +33,10 @@ export interface AppShellProps {
   updateWithAI?: ReactNode;
   /** The Approve control. Render it in the title bar, as the final action. */
   approveButton?: ReactNode;
+  /** Buttons opening the read-only companion documents. Title bar, left of Update. */
+  companionTabs?: ReactNode;
+  /** The companion overlay itself. Rendered last so it paints over everything. */
+  companionDrawer?: ReactNode;
   /** The editor. Render it inside the white page. */
   children: ReactNode;
 }
@@ -47,6 +51,8 @@ export function AppShell({
   tracking,
   updateWithAI,
   approveButton,
+  companionTabs,
+  companionDrawer,
   children,
 }: AppShellProps) {
   /*
@@ -76,6 +82,7 @@ export function AppShell({
         </div>
         <span className="titlebar-docname">{docName}</span>
         <div className="titlebar-right">
+          {companionTabs}
           {updateWithAI}
           {approveButton}
           <div aria-live="polite" aria-atomic="true">
@@ -133,6 +140,9 @@ export function AppShell({
        * moment a revision landed. See ReviewBar.css.
        */}
       <ReviewBar tracking={tracking} />
+
+      {/* Last, and fixed: it paints over the whole shell while it is open. */}
+      {companionDrawer}
     </div>
   );
 }

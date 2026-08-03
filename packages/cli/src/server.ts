@@ -6,6 +6,8 @@ import type { FSWatcher } from "node:fs";
 import { resolve, extname, basename, dirname } from "node:path";
 import type {
   AnnotationsResponse,
+  CompanionDocument,
+  CompanionList,
   ConflictResponse,
   ErrorResponse,
   PlanResponse,
@@ -19,6 +21,7 @@ import type {
 import { hashContent } from "./hash.js";
 import { writeFileAtomic } from "./atomic.js";
 import { resolveStaticPath } from "./static-path.js";
+import { listCompanions, readCompanion } from "./companions.js";
 import { buildTicketPlan, countOpenComments, createTickets } from "./review.js";
 import {
   EMPTY_SIDECAR_REVISION,
@@ -67,6 +70,8 @@ type JsonBody =
   | AnnotationsConflictResponse
   | RevisionState
   | RevisionErrorResponse
+  | CompanionList
+  | CompanionDocument
   | TicketPlan
   | ReviewSummary;
 
@@ -752,6 +757,43 @@ function createHandler(
       } else {
         res.writeHead(405, { "Content-Type": "text/plain", Allow: "GET, PUT" });
         res.end("Method Not Allowed");
+      }
+      return;
+    }
+
+    if (pathname === "/api/companions") {
+      if (method === "GET") {
+        sendJson(res, 200, await listCompanions(planPath));
+      } else {
+        res.writeHead(405, { "Content-Type": "text/plain", Allow: "GET" });
+        res.end("Method Not Allowed");
+      }
+      return;
+    }
+
+    if (pathname.startsWith("/api/companions/")) {
+      if (method !== "GET") {
+        res.writeHead(405, { "Content-Type": "text/plain", Allow: "GET" });
+        res.end("Method Not Allowed");
+        return;
+      }
+      /*
+       * Decoded before the allowlist check, so an encoded name is matched as
+       * the name it decodes to rather than slipping through as a literal. A
+       * malformed escape is simply not a companion.
+       */
+      let requested: string;
+      try {
+        requested = decodeURIComponent(pathname.slice("/api/companions/".length));
+      } catch {
+        sendJson(res, 404, { error: "Not a companion document" } satisfies ErrorResponse);
+        return;
+      }
+      const result = await readCompanion(planPath, requested);
+      if (result.ok) {
+        sendJson(res, 200, result.document);
+      } else {
+        sendJson(res, result.status, { error: result.error } satisfies ErrorResponse);
       }
       return;
     }
