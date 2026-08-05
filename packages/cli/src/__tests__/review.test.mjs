@@ -89,6 +89,75 @@ describe("planToTickets", () => {
   });
 });
 
+describe("planToTickets — soft-wrapped steps", () => {
+  test("a step wrapped across lines keeps its whole sentence", () => {
+    // A plan is soft-wrapped markdown. Reading only the line carrying the
+    // marker truncated eleven titles mid-sentence in one real run — an agent
+    // given "…obstacle set from" has half an instruction and no way to know it.
+    const tickets = planToTickets(
+      "# Plan\n\n## M1\n\n" +
+        "1. Build the obstacle set from the tileset and wire it into the collision\n" +
+        "   layer so the player cannot walk through the fence.\n" +
+        "2. Add a fallback branch.\n",
+    );
+
+    assert.equal(
+      tickets[1].title,
+      "Build the obstacle set from the tileset and wire it into the collision layer so the player cannot walk through the fence.",
+    );
+    assert.equal(tickets[2].title, "Add a fallback branch.");
+  });
+
+  test("folds several continuation lines, collapsing the wrap to single spaces", () => {
+    const tickets = planToTickets(
+      "# Plan\n\n## M1\n\n- One sentence that\n  runs over\n  three lines.\n",
+    );
+
+    assert.equal(tickets[1].title, "One sentence that runs over three lines.");
+  });
+
+  test("a nested list under a step is that step's detail, not a lost line", () => {
+    const tickets = planToTickets(
+      "# Plan\n\n## M1\n\n1. Re-theme the map.\n   - Keep the palette.\n   - Do not move spawn.\n",
+    );
+
+    assert.equal(tickets.length, 2);
+    assert.equal(tickets[1].title, "Re-theme the map.");
+    assert.equal(tickets[1].body, "- Keep the palette.\n- Do not move spawn.");
+  });
+
+  test("a blank line between items still chains them — loose lists are lists", () => {
+    const tickets = planToTickets("# Plan\n\n## M1\n\n1. First.\n\n2. Second.\n\n3. Third.\n");
+
+    assert.deepEqual(
+      tickets.slice(1).map((t) => t.title),
+      ["First.", "Second.", "Third."],
+    );
+    assert.deepEqual(tickets[2].deps, [1]);
+    assert.deepEqual(tickets[3].deps, [2]);
+  });
+
+  test("prose after a list does not become part of the last step", () => {
+    const tickets = planToTickets(
+      "# Plan\n\n## M1\n\n1. Do the thing.\n\nThis paragraph is commentary.\n\n- And a later bullet.\n",
+    );
+
+    assert.equal(tickets[1].title, "Do the thing.");
+    assert.equal(tickets[2].title, "And a later bullet.");
+  });
+
+  test("a wrapped line inside a fenced block is still not a step", () => {
+    const tickets = planToTickets(
+      "# Plan\n\n## M1\n\n1. Real step.\n\n```\n1. Not a step\n   continued\n```\n",
+    );
+
+    assert.deepEqual(
+      tickets.slice(1).map((t) => t.title),
+      ["Real step."],
+    );
+  });
+});
+
 describe("exit codes", () => {
   test("are distinct so a parent can branch on them", () => {
     const codes = [EXIT_APPROVED, EXIT_CANCELLED, EXIT_ERRORED];

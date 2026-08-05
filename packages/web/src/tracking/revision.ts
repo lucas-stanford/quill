@@ -67,7 +67,27 @@ export function scanBlocks(doc: ProseMirrorNode): BlockInfo[] {
   doc.forEach((node, offset, index) => {
     const segments: TextSegment[] = [];
     let text = "";
+    /*
+     * A block boundary inside the node — between two list items, say — is a
+     * newline in the diff's text, exactly as it is in the markdown.
+     *
+     * Without it a list is one run of text in which "…exists." and "Add Greek…"
+     * are adjacent characters, so the word diff pairs them into a single token
+     * and emits an edit that straddles the two items. Accepting that edit
+     * deletes across the boundary, ProseMirror joins the items, and two steps
+     * become one — which then becomes one ticket instead of two. The separator
+     * is what makes the boundary visible to the tokenizer.
+     *
+     * It gets no segment of its own, so it maps to no document position and
+     * nothing can be inserted "into" it.
+     */
+    let seenTextblock = false;
     node.nodesBetween(0, node.content.size, (child, pos) => {
+      if (child.isTextblock) {
+        if (seenTextblock) text += "\n";
+        seenTextblock = true;
+        return true;
+      }
       if (child.isText && child.text) {
         const from = offset + 1 + pos;
         segments.push({ from, to: from + child.text.length, offset: text.length });
@@ -87,10 +107,20 @@ export function scanBlocks(doc: ProseMirrorNode): BlockInfo[] {
   return blocks;
 }
 
-/** Plain text of a parsed markdown node, in document order. */
+/**
+ * Plain text of a parsed markdown node, in document order.
+ *
+ * Sibling textblocks are joined with a newline, matching `scanBlocks`, so the
+ * two sides of the diff describe a list the same way and a word token can never
+ * span two list items.
+ */
 export function textOfJSON(node: JSONContent): string {
   if (node.type === "text") return node.text ?? "";
-  return (node.content ?? []).map(textOfJSON).join("");
+  const children = node.content ?? [];
+  if (children.length === 0) return "";
+  // A textblock is one whose children are inline; its text runs together.
+  const inline = children.some((child) => child.type === "text");
+  return children.map(textOfJSON).join(inline ? "" : "\n");
 }
 
 export function jsonBlocks(doc: JSONContent): DiffBlock<JSONContent>[] {
@@ -118,6 +148,44 @@ function blockTextSpan(block: BlockInfo): { from: number; to: number } | null {
     from: block.segments[0].from,
     to: block.segments[block.segments.length - 1].to,
   };
+}
+
+/**
+ * A range of the block's text, as document ranges that each stay inside one
+ * textblock.
+ *
+ * Belt and braces behind the newline separator above. A tracked deletion whose
+ * two ends sit in different list items is a deletion that, when accepted, joins
+ * those items — ProseMirror's `delete` across a block boundary is a join. Two
+ * plan steps become one, and one of them stops existing. So a text range is cut
+ * wherever the document positions stop being contiguous, and each piece is
+ * tracked separately: the reviewer sees the same strike-through and accepting
+ * removes the same characters, but the structure survives.
+ */
+function offsetRangeToDocRanges(
+  block: BlockInfo,
+  fromOffset: number,
+  toOffset: number,
+): { from: number; to: number }[] {
+  const ranges: { from: number; to: number }[] = [];
+
+  for (const segment of block.segments) {
+    const length = segment.to - segment.from;
+    const start = Math.max(fromOffset, segment.offset);
+    const end = Math.min(toOffset, segment.offset + length);
+    if (end <= start) continue;
+
+    const from = segment.from + (start - segment.offset);
+    const to = segment.from + (end - segment.offset);
+
+    const previous = ranges[ranges.length - 1];
+    // Contiguous in the document means the same textblock: merge. A gap means
+    // a block boundary was crossed, so this is a new range.
+    if (previous && previous.to === from) previous.to = to;
+    else ranges.push({ from, to });
+  }
+
+  return ranges;
 }
 
 // ─── Planning ───────────────────────────────────────────────────────────────
@@ -152,8 +220,16 @@ export function planRevision(
   const edits: RevisionEdit[] = [];
   for (const op of ops) {
     if (op.type === "delete") {
-      const span = blockTextSpan(oldBlocks[op.oldIndex]);
-      if (span) edits.push({ kind: "markDeleted", ...span });
+      const block = oldBlocks[op.oldIndex];
+      const span = blockTextSpan(block);
+      if (span) {
+        // A removed list is several textblocks; strike each one so accepting
+        // cannot join what is left of them.
+        for (const range of offsetRangeToDocRanges(block, 0, block.text.length)) {
+          edits.push({ kind: "markDeleted", ...range });
+        }
+        if (block.segments.length === 0) edits.push({ kind: "markDeleted", ...span });
+      }
       continue;
     }
 
@@ -172,10 +248,12 @@ export function planRevision(
         continue;
       }
       if (wordOp.type === "delete") {
-        const from = offsetToPos(block, offset);
-        const to = offsetToPos(block, offset + wordOp.text.length);
-        if (from !== null && to !== null && to > from) {
-          edits.push({ kind: "markDeleted", from, to });
+        for (const range of offsetRangeToDocRanges(
+          block,
+          offset,
+          offset + wordOp.text.length,
+        )) {
+          if (range.to > range.from) edits.push({ kind: "markDeleted", ...range });
         }
         offset += wordOp.text.length;
         continue;

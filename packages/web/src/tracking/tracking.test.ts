@@ -351,6 +351,113 @@ describe("recording edits", () => {
   });
 });
 
+describe("applyRevision — list items stay separate steps", () => {
+  const STEPS = `# Plan
+
+## M1 — Ride in
+
+1. Add a fallback branch where no match exists.
+2. Add Greek and mystical props to the shrine.
+3. Wire the reputation system to the outcome.
+`;
+
+  /**
+   * The bug this is here to keep dead.
+   *
+   * `scanBlocks` used to hand the diff one block per top-level node, so an
+   * ordered list arrived as a single run of text in which "…exists." and "Add
+   * Greek…" were adjacent characters. The word tokenizer paired them, the diff
+   * emitted one edit spanning both items, and accepting it deleted across the
+   * boundary — which in ProseMirror is a join. Two steps became one item.
+   *
+   * It survived to an approved plan and cost three tickets that were never
+   * created. Nothing about it is theoretical.
+   */
+  it("a reworded step does not swallow the step after it", () => {
+    const revised = STEPS.replace(
+      "1. Add a fallback branch where no match exists.",
+      "1. Add a fallback branch where no match is found.",
+    );
+
+    const h = harness(STEPS);
+    h.dispatch(buildRevisionTransaction(h.state, revised));
+    h.dispatch(buildAcceptTransaction(h.state, idsOf(h)));
+
+    const out = h.markdown();
+    expect(out).toContain("1. Add a fallback branch where no match is found.");
+    expect(out).toContain("2. Add Greek and mystical props to the shrine.");
+    expect(out).toContain("3. Wire the reputation system to the outcome.");
+    // The join showed up as two sentences with no space between them.
+    expect(out).not.toMatch(/\.\S/);
+  });
+
+  it("keeps three list items as three list items", () => {
+    const revised = STEPS.replace("the shrine", "the roadside shrine");
+
+    const h = harness(STEPS);
+    h.dispatch(buildRevisionTransaction(h.state, revised));
+    h.dispatch(buildAcceptTransaction(h.state, idsOf(h)));
+
+    const list = h.state.doc.child(2);
+    expect(list.type.name).toBe("orderedList");
+    expect(list.childCount).toBe(3);
+  });
+
+  it("deleting one step leaves the others whole", () => {
+    const revised = STEPS.replace("2. Add Greek and mystical props to the shrine.\n", "");
+
+    const h = harness(STEPS);
+    h.dispatch(buildRevisionTransaction(h.state, revised));
+    h.dispatch(buildAcceptTransaction(h.state, idsOf(h)));
+
+    const out = h.markdown();
+    expect(out).toContain("Add a fallback branch where no match exists.");
+    expect(out).toContain("Wire the reputation system to the outcome.");
+    expect(out).not.toContain("mystical props");
+    expect(out).not.toMatch(/\.\S/);
+  });
+
+  it("a human striking across two steps still accepts as two steps", () => {
+    // The reviewer's own selection can span items even when the diff's cannot:
+    // drag from the middle of step 1 into step 2 and press Backspace. Accepting
+    // that must not join them either, which is why the guard also lives at the
+    // point of deletion and not only in how the diff is built.
+    const h = harness(STEPS);
+    const doc = h.state.doc;
+    const list = doc.child(2);
+    const listStart = 0 + doc.child(0).nodeSize + doc.child(1).nodeSize;
+    const first = listStart + 1;
+    const firstText = first + 2;
+    // From inside step 1 to inside step 2, straight across the boundary.
+    const from = firstText + 10;
+    const to = from + list.child(0).nodeSize;
+
+    h.dispatch(buildDeletionTransaction(h.state, from, to, "human", "end"));
+    expect(h.changes().length).toBeGreaterThan(0);
+    h.dispatch(buildAcceptTransaction(h.state, idsOf(h)));
+
+    const after = h.state.doc.child(2);
+    expect(after.type.name).toBe("orderedList");
+    // Both struck items keep the text outside the strike, so all three items
+    // survive. Two would mean the pair had been fused into one step.
+    expect(after.childCount).toBe(3);
+    expect(h.markdown()).toContain("Wire the reputation system to the outcome.");
+  });
+
+  it("the diff sees a list as one line per item, not one run of text", () => {
+    const h = harness(STEPS);
+    const list = scanBlocks(h.state.doc).find((b) => b.type === "orderedList");
+
+    expect(list).toBeDefined();
+    // Without the separator the tokenizer cannot tell where a step ends.
+    expect(list!.text.split("\n")).toEqual([
+      "Add a fallback branch where no match exists.",
+      "Add Greek and mystical props to the shrine.",
+      "Wire the reputation system to the outcome.",
+    ]);
+  });
+});
+
 describe("applyRevision", () => {
   const oneSentence = PLAN.replace(
     "Reviewing an agent's plan in a terminal is bad.",

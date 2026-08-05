@@ -55,10 +55,26 @@ function splitHeadings(markdown: string): Heading[] {
  * Numbered steps in a plan are almost always sequential, so they get dependency
  * edges. Bullets are a set of related things, not an order, so they do not —
  * inventing an order the author did not write would produce a board that lies.
+ *
+ * A step is its whole item, not its first line. A plan is soft-wrapped
+ * markdown, so a sentence longer than the wrap width continues on an indented
+ * line; reading only the line with the marker on it truncates the instruction
+ * mid-sentence and hands an agent half a job. Continuation lines are folded
+ * back into the title, and any nested list beneath a step is kept as that
+ * step's detail rather than dropped.
  */
-function extractSteps(body: string[]): { title: string; ordered: boolean }[] {
-  const steps: { title: string; ordered: boolean }[] = [];
+interface Step {
+  title: string;
+  ordered: boolean;
+  /** Nested detail lines beneath the step, verbatim. */
+  detail: string[];
+}
+
+function extractSteps(body: string[]): Step[] {
+  const steps: Step[] = [];
   let fence: string | null = null;
+  /** A blank line ends the item's opening sentence; what follows is detail. */
+  let blankSeen = false;
 
   for (const raw of body) {
     const fenceMatch = /^(\s*)(```+|~~~+)/.exec(raw);
@@ -70,14 +86,38 @@ function extractSteps(body: string[]): { title: string; ordered: boolean }[] {
     }
     if (fence !== null) continue;
 
-    // Top-level list items only: a nested item is a detail of its parent.
+    // Top-level list items only: an indented item is a detail of its parent.
     const ordered = /^(\d+)[.)]\s+(.*\S)\s*$/.exec(raw);
     if (ordered) {
-      steps.push({ title: stripInline(ordered[2]), ordered: true });
+      steps.push({ title: stripInline(ordered[2]), ordered: true, detail: [] });
+      blankSeen = false;
       continue;
     }
     const bullet = /^[-*+]\s+(.*\S)\s*$/.exec(raw);
-    if (bullet) steps.push({ title: stripInline(bullet[1]), ordered: false });
+    if (bullet) {
+      steps.push({ title: stripInline(bullet[1]), ordered: false, detail: [] });
+      blankSeen = false;
+      continue;
+    }
+
+    const step = steps[steps.length - 1];
+    if (step === undefined) continue;
+
+    // Blank, or back at column 0: the sentence is over. Scanning continues —
+    // a heading's body may hold prose and then a second list.
+    if (raw.trim() === "" || !/^\s/.test(raw)) {
+      blankSeen = true;
+      continue;
+    }
+
+    const trimmed = raw.trim();
+    // An indented marker is a sub-item, and a line after a blank is a second
+    // paragraph of the item: detail either way, never part of the title.
+    if (blankSeen || /^(\d+[.)]|[-*+])\s+/.test(trimmed)) {
+      step.detail.push(trimmed);
+      continue;
+    }
+    step.title = `${step.title} ${stripInline(trimmed)}`.trim();
   }
 
   return steps;
@@ -128,6 +168,10 @@ export function planToTickets(markdown: string): TicketPreview[] {
         level: heading.level + 1,
         parent: parentIndex,
         deps: step.ordered && previousOrdered !== null ? [previousOrdered] : [],
+        // Sub-items are the step's detail. They are not steps of their own, but
+        // they are still instructions, and a ticket that quietly drops them
+        // gives an agent half the job.
+        body: step.detail.length > 0 ? step.detail.join("\n") : undefined,
       });
       if (step.ordered) previousOrdered = index;
     }

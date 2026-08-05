@@ -4,3 +4,6 @@ dist/
 .DS_Store
 .quill-tmp*
 packages/cli/README.md
+# Throwaway CLI test workspaces. Cleaned up by the tests themselves, but an
+# interrupted run leaves them behind, and `git add -A` would take them.
+packages/cli/src/__tests__/.tmp/

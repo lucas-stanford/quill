@@ -335,26 +335,85 @@ function marksAt(doc: ProseMirrorNode, pos: number): readonly Mark[] {
  * `dropEmptyBlock` is used when accepting a deletion that covers a whole
  * paragraph: taking only the text would leave an empty block behind, which is a
  * blank line the reviewer never asked to keep.
+ *
+ * A range is never allowed to delete ACROSS a block boundary. In ProseMirror
+ * `delete(from, to)` spanning two textblocks joins them, so accepting one hunk
+ * would run two list items into a single step — the text of both survives, one
+ * of them stops being a step, and the ticket it would have become is never
+ * created. The range is therefore cut at every boundary and each piece deleted
+ * on its own. Nothing about what the reviewer sees changes; the structure does
+ * not collapse.
  */
 function deleteRange(
   tr: Transaction,
   range: Interval,
   dropEmptyBlock: boolean,
 ): void {
-  if (dropEmptyBlock) {
-    const resolved = tr.doc.resolve(clamp(range.from, tr.doc));
-    const wholeBlock =
-      resolved.depth === 1 &&
-      resolved.parent.isTextblock &&
-      range.from === resolved.start() &&
-      range.to === resolved.end() &&
-      tr.doc.childCount > 1;
-    if (wholeBlock) {
-      tr.delete(resolved.before(), resolved.after());
-      return;
+  const pieces = splitAtBlockBoundaries(tr, range);
+
+  /*
+   * One textblock, or none: this is an ordinary range — quite possibly a whole
+   * inserted node, whose range takes in the node's own open and close tokens —
+   * and it is deleted exactly as given. Narrowing it to the block's content
+   * would leave the empty node behind.
+   */
+  if (pieces === null) {
+    if (dropEmptyBlock) {
+      const resolved = tr.doc.resolve(clamp(range.from, tr.doc));
+      const wholeBlock =
+        resolved.depth === 1 &&
+        resolved.parent.isTextblock &&
+        range.from === resolved.start() &&
+        range.to === resolved.end() &&
+        tr.doc.childCount > 1;
+      if (wholeBlock) {
+        tr.delete(resolved.before(), resolved.after());
+        return;
+      }
     }
+    tr.delete(range.from, range.to);
+    return;
   }
-  tr.delete(range.from, range.to);
+
+  /*
+   * Two or more: deleting straight through would join them. Each block's share
+   * is deleted on its own, and a block left with nothing goes with it — an
+   * emptied step is not a step, and keeping the husk would put a blank item in
+   * the list.
+   */
+  for (const piece of pieces) {
+    const resolved = tr.doc.resolve(clamp(piece.from, tr.doc));
+    const emptied =
+      resolved.parent.isTextblock &&
+      piece.from === resolved.start() &&
+      piece.to === resolved.end() &&
+      (resolved.depth > 1 || tr.doc.childCount > 1);
+    if (emptied) tr.delete(resolved.before(), resolved.after());
+    else tr.delete(piece.from, piece.to);
+  }
+}
+
+/**
+ * The parts of `range` that each lie within a single textblock, back to front
+ * so earlier positions stay valid as the transaction is built — or `null` when
+ * the range touches at most one textblock and needs no special handling.
+ */
+function splitAtBlockBoundaries(tr: Transaction, range: Interval): Interval[] | null {
+  const from = clamp(range.from, tr.doc);
+  const to = clamp(range.to, tr.doc);
+  if (to <= from) return null;
+
+  const pieces: Interval[] = [];
+  tr.doc.nodesBetween(from, to, (node, pos) => {
+    if (!node.isTextblock) return true;
+    const start = Math.max(from, pos + 1);
+    const end = Math.min(to, pos + 1 + node.content.size);
+    if (end > start) pieces.push({ from: start, to: end });
+    return false;
+  });
+
+  if (pieces.length < 2) return null;
+  return pieces.sort((a, b) => b.from - a.from);
 }
 
 function resolveTargets(

@@ -170,7 +170,7 @@ sentence.
 ```bash
 pnpm install
 pnpm build          # web bundle, then the CLI that embeds it
-pnpm test           # 475 tests
+pnpm test           # 486 tests
 pnpm typecheck
 ```
 

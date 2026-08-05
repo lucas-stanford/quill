@@ -180,7 +180,17 @@ export default function App() {
         status === "ready" ? (
           <UpdateWithAI
             revision={revision}
-            pendingCount={annotations.forBrief().length + tracking.changes.length}
+            /*
+             * Everything the brief would carry. Feedback notes count: they are
+             * a first-class part of the brief, and leaving them out disabled
+             * the button for a reviewer whose only objection was about the
+             * plan as a whole — which is exactly the case the panel exists for.
+             */
+            pendingCount={
+              annotations.forBrief().length +
+              annotations.feedbackForBrief().length +
+              tracking.changes.length
+            }
           />
         ) : null
       }
