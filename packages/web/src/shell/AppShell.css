@@ -261,7 +261,31 @@
   filter: drop-shadow(0 2px 10px var(--color-shadow));
 }
 
-/* Rail fits beside the page: page + rail centred as a group. */
+/* ── Feedback rail (left) ───────────────────────────────────
+ *
+ * Feedback on the plan as a whole, opposite the comments on the right. It is
+ * on the left precisely because it is NOT anchored: the right rail's bubbles
+ * are positioned against live text coordinates measured from the top of the
+ * bubble layer, so anything stacked in that column shifts every anchor. Over
+ * here nothing is measured against anything.
+ *
+ * The tokens make the tiering exact: 300 + 24 + 816 + 24 + 300 + 2×24 gutter
+ * = 1512px, which is the same breakpoint at which the page could already sit
+ * dead centre. So at >= 1512 both rails are real columns and the page is
+ * centred between them; below that there is not room for two rails beside a
+ * full-width page, and this one overlays the left margin the way the comment
+ * rail overlays the right on a narrow window.
+ */
+.feedback-rail {
+  min-width: 0;
+  position: absolute;
+  top: calc(var(--ribbon-height) + var(--canvas-pad-top));
+  left: var(--canvas-gutter);
+  width: min(var(--rail-width), calc(100% - 2 * var(--canvas-gutter)));
+  filter: drop-shadow(0 2px 10px var(--color-shadow));
+}
+
+/* Comment rail fits beside the page: page + rail centred as a group. */
 @media (min-width: 1188px) {
   .page-canvas-inner {
     grid-template-columns:
@@ -282,16 +306,37 @@
   }
 }
 
-/* Right gutter alone fits the rail: page dead centre, rail in the margin. */
+/*
+ * Both rails fit beside the page: feedback left, page dead centre, comments
+ * right. Five columns with the outer two equal, so the page is centred in the
+ * viewport rather than in what is left of it.
+ */
 @media (min-width: 1512px) {
   .page-canvas-inner {
     grid-template-columns:
       minmax(0, 1fr)
+      var(--rail-width)
       min(var(--page-width), 100%)
+      var(--rail-width)
       minmax(0, 1fr);
+    column-gap: var(--rail-gap);
   }
 
+  .feedback-rail {
+    position: relative;
+    top: auto;
+    left: auto;
+    grid-column: 2;
+    width: var(--rail-width);
+    filter: none;
+  }
+
+  /* The page moves over one — see the override below `.page-sheet`, which has
+     to come after it in source order to win. */
+
   .comment-rail {
+    grid-column: 4;
+    margin-left: 0;
     justify-self: start;
   }
 }
@@ -322,6 +367,18 @@
    */
   padding: var(--page-padding-v)
            clamp(24px, 11.765%, var(--page-padding-h));
+}
+
+/*
+ * Both rails beside the page: the feedback rail owns column 2, so the page
+ * moves over one. This must come AFTER the base rule above — a media query
+ * adds no specificity, so the plain `grid-column: 2` would otherwise win on
+ * source order and drop the page back on top of the feedback rail.
+ */
+@media (min-width: 1512px) {
+  .page-sheet {
+    grid-column: 3;
+  }
 }
 
 /* ── Loading skeleton ───────────────────────────────────────── */

@@ -54,6 +54,17 @@ function hasInstruction(comment: Comment): boolean {
 }
 
 /**
+ * The ids of the feedback notes this brief would carry, so the round trip can
+ * resolve exactly the notes the agent was asked to act on.
+ */
+export function briefFeedbackIds(annotations: AnnotationsApi): string[] {
+  return annotations
+    .feedbackForBrief()
+    .filter((entry) => entry.body.trim() !== "")
+    .map((entry) => entry.id);
+}
+
+/**
  * The ids of the threads this brief would carry — the same selection
  * `buildComments` makes, so a caller can act on exactly what the agent was
  * asked to act on and nothing else.
@@ -143,8 +154,11 @@ export function buildBrief(
     edits: buildEdits(markdown, tracking),
   };
 
-  const feedback = (annotations.feedback ?? "").trim();
-  if (feedback !== "") brief.feedback = feedback;
+  const feedback = annotations
+    .feedbackForBrief()
+    .map((entry) => entry.body.trim())
+    .filter((note) => note !== "");
+  if (feedback.length > 0) brief.feedback = feedback;
 
   const note = (instruction ?? "").trim();
   if (note !== "") brief.instruction = note;

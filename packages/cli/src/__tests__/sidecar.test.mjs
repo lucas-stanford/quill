@@ -229,35 +229,65 @@ describe("validateSidecar", () => {
 });
 
 describe("validateSidecar — general feedback", () => {
-  it("keeps feedback about the plan as a whole", () => {
+  const entry = (over = {}) => ({
+    id: "f1",
+    body: "Five milestones is too many.",
+    createdAt: "2026-08-04T00:00:00.000Z",
+    resolved: false,
+    ...over,
+  });
+
+  it("keeps the notes about the plan as a whole", () => {
+    const result = validateSidecar({ version: 1, comments: [], feedback: [entry()] });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.sidecar.feedback.length, 1);
+    assert.equal(result.sidecar.feedback[0].body, "Five milestones is too many.");
+    assert.equal(result.sidecar.feedback[0].resolved, false);
+  });
+
+  it("keeps each note separate, and keeps their resolved state", () => {
     const result = validateSidecar({
       version: 1,
       comments: [],
-      feedback: "Five milestones is too many.",
+      feedback: [entry({ id: "f1", resolved: true }), entry({ id: "f2", body: "Second." })],
     });
 
     assert.equal(result.ok, true);
-    assert.equal(result.sidecar.feedback, "Five milestones is too many.");
+    assert.deepEqual(
+      result.sidecar.feedback.map((f) => [f.id, f.resolved]),
+      [["f1", true], ["f2", false]],
+    );
+  });
+
+  it("migrates the bare string an earlier build wrote", () => {
+    // A reviewer's note is not worth losing over a format change, and both
+    // shapes are unambiguous, so the string becomes one entry rather than
+    // being dropped on the floor.
+    const result = validateSidecar({ version: 1, comments: [], feedback: "merge M3 into M1" });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.sidecar.feedback.length, 1);
+    assert.equal(result.sidecar.feedback[0].body, "merge M3 into M1");
+    assert.equal(result.sidecar.feedback[0].resolved, false);
+    assert.equal(typeof result.sidecar.feedback[0].id, "string");
   });
 
   it("survives the round trip through the canonical serialization", () => {
     const written = serializeSidecar(
-      validateSidecar({ version: 1, comments: [], feedback: "merge M3 into M1" }).sidecar,
+      validateSidecar({ version: 1, comments: [], feedback: [entry()] }).sidecar,
     );
     const read = parseSidecar(written);
 
     assert.equal(read.ok, true);
-    assert.equal(read.sidecar.feedback, "merge M3 into M1");
+    assert.deepEqual(read.sidecar.feedback, [entry()]);
   });
 
-  it("drops empty or whitespace-only feedback rather than writing it", () => {
-    // Absent and empty are the same state; writing "" would rewrite every
-    // sidecar authored before this field existed, for no change the reviewer
-    // made. The key must not appear at all.
-    for (const feedback of ["", "   \n\t "]) {
+  it("drops empty notes, and the key when none survive", () => {
+    for (const feedback of [[], [entry({ body: "   \n\t " })], ""]) {
       const result = validateSidecar({ version: 1, comments: [], feedback });
       assert.equal(result.ok, true);
-      assert.equal("feedback" in result.sidecar, false);
+      assert.equal("feedback" in result.sidecar, false, JSON.stringify(feedback));
     }
   });
 
@@ -268,11 +298,17 @@ describe("validateSidecar — general feedback", () => {
     assert.equal(after, before);
   });
 
-  it("rejects feedback that is not a string, naming the field", () => {
-    for (const feedback of [42, true, [], {}]) {
+  it("rejects a malformed note, naming the field", () => {
+    const cases = [
+      [42, /feedback must be an array/],
+      [[{ body: "x" }], /feedback\[0\]\.id/],
+      [[entry({ body: 7 })], /feedback\[0\]\.body must be a string/],
+      [[entry({ resolved: "yes" })], /feedback\[0\]\.resolved must be a boolean/],
+    ];
+    for (const [feedback, pattern] of cases) {
       const result = validateSidecar({ version: 1, comments: [], feedback });
-      assert.equal(result.ok, false);
-      assert.match(result.reason, /feedback/);
+      assert.equal(result.ok, false, JSON.stringify(feedback));
+      assert.match(result.reason, pattern);
     }
   });
 });

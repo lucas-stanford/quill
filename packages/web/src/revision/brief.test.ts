@@ -2,10 +2,11 @@ import { describe, expect, it } from "vitest";
 import { selectForBrief } from "../annotations/select";
 import type { AnnotationsApi } from "../annotations";
 import type { TrackedChange, TrackedChangesApi } from "../tracking";
-import type { Comment, RevisionBrief } from "../types";
+import type { Comment, FeedbackEntry, RevisionBrief } from "../types";
 import {
   BRIEF_SOFT_LIMIT_CHARS,
   briefCommentIds,
+  briefFeedbackIds,
   buildBrief,
   formatBriefPrompt,
   isBriefEmpty,
@@ -50,7 +51,7 @@ function comment(overrides: Partial<Comment> & { quote?: string }): Comment {
 }
 
 /** Mirrors useAnnotations: resolved threads never reach the brief, orphans do. */
-function annotationsOf(comments: Comment[], feedback = ""): AnnotationsApi {
+function annotationsOf(comments: Comment[], feedback: FeedbackEntry[] = []): AnnotationsApi {
   return {
     comments,
     orphans: comments.filter((c) => c.orphaned === true),
@@ -58,15 +59,36 @@ function annotationsOf(comments: Comment[], feedback = ""): AnnotationsApi {
     addReply: () => {},
     resolve: () => {},
     resolveMany: () => {},
+    editComment: () => {},
+    editReply: () => {},
     remove: () => {},
     activeId: null,
     setActiveId: () => {},
     forBrief: () => selectForBrief(comments),
     feedback,
-    setFeedback: () => {},
-    sidecar: feedback
+    addFeedback: () => {},
+    editFeedback: () => {},
+    removeFeedback: () => {},
+    resolveFeedback: () => {},
+    resolveFeedbackMany: () => {},
+    feedbackForBrief: () =>
+      feedback.filter((entry) => !entry.resolved && entry.body.trim() !== ""),
+    sidecar: feedback.length > 0
       ? { version: 1, comments, feedback }
       : { version: 1, comments },
+  };
+}
+
+let feedbackSeq = 0;
+
+/** A feedback note, with only the fields a test cares about spelled out. */
+function note(body: string, resolved = false): FeedbackEntry {
+  feedbackSeq += 1;
+  return {
+    id: `f${feedbackSeq}`,
+    body,
+    createdAt: `2026-08-0${(feedbackSeq % 9) + 1}T00:00:00.000Z`,
+    resolved,
   };
 }
 
@@ -103,13 +125,14 @@ function brief(
   return buildBrief(markdown, annotationsOf(comments), trackingOf(changes), instruction);
 }
 
-/** A brief built with standing feedback in the rail's panel. */
+/** A brief built with standing feedback in the left rail. */
 function briefWithFeedback(
-  feedback: string,
+  feedback: string | FeedbackEntry[],
   comments: Comment[] = [],
   changes: TrackedChange[] = [],
 ): RevisionBrief {
-  return buildBrief(PLAN, annotationsOf(comments, feedback), trackingOf(changes));
+  const notes = typeof feedback === "string" ? [note(feedback)] : feedback;
+  return buildBrief(PLAN, annotationsOf(comments, notes), trackingOf(changes));
 }
 
 /* ── Comments ──────────────────────────────────────────────────────────── */
@@ -389,12 +412,40 @@ describe("buildBrief — instruction", () => {
 
 describe("buildBrief — general feedback", () => {
   it("carries the rail's standing feedback, trimmed", () => {
-    expect(briefWithFeedback("  merge M3 into M1  ").feedback).toBe("merge M3 into M1");
+    expect(briefWithFeedback("  merge M3 into M1  ").feedback).toEqual(["merge M3 into M1"]);
   });
 
-  it("omits the key entirely when the panel is empty or blank", () => {
-    expect("feedback" in briefWithFeedback("")).toBe(false);
-    expect("feedback" in briefWithFeedback("   \n ")).toBe(false);
+  it("keeps each note separate — two objections are not one paragraph", () => {
+    const both = briefWithFeedback([
+      note("This is three milestones pretending to be one."),
+      note("You never say how it deploys."),
+    ]);
+
+    expect(both.feedback).toEqual([
+      "This is three milestones pretending to be one.",
+      "You never say how it deploys.",
+    ]);
+
+    const prompt = formatBriefPrompt(both);
+    expect(prompt).toContain("=== FEEDBACK ON THE PLAN AS A WHOLE (2) ===");
+    // Numbered, so an agent cannot answer the first and quietly drop the second.
+    expect(prompt).toContain("1. This is three milestones pretending to be one.");
+    expect(prompt).toContain("2. You never say how it deploys.");
+  });
+
+  it("leaves out notes already sent and resolved", () => {
+    const mixed = briefWithFeedback([
+      note("Already asked for and answered.", true),
+      note("Still outstanding."),
+    ]);
+
+    expect(mixed.feedback).toEqual(["Still outstanding."]);
+  });
+
+  it("omits the key entirely when there is nothing open to say", () => {
+    expect("feedback" in briefWithFeedback([])).toBe(false);
+    expect("feedback" in briefWithFeedback([note("   \n ")])).toBe(false);
+    expect("feedback" in briefWithFeedback([note("sent", true)])).toBe(false);
   });
 
   it("feedback on its own is a valid brief — not every objection has a quote", () => {
@@ -409,16 +460,16 @@ describe("buildBrief — general feedback", () => {
   it("is its own section of the prompt, distinct from the update-dialog note", () => {
     const both = buildBrief(
       PLAN,
-      annotationsOf([], "the plan never says how it deploys"),
+      annotationsOf([], [note("the plan never says how it deploys")]),
       trackingOf([]),
       "and shorten the rollback",
     );
 
-    expect(both.feedback).toBe("the plan never says how it deploys");
+    expect(both.feedback).toEqual(["the plan never says how it deploys"]);
     expect(both.instruction).toBe("and shorten the rollback");
 
     const prompt = formatBriefPrompt(both);
-    expect(prompt).toContain("=== FEEDBACK ON THE PLAN AS A WHOLE ===");
+    expect(prompt).toContain("=== FEEDBACK ON THE PLAN AS A WHOLE (1) ===");
     expect(prompt).toContain("=== NOTE FROM THE REVIEWER ===");
     // One does not overwrite the other: both reach the agent.
     expect(prompt).toContain("the plan never says how it deploys");
@@ -426,11 +477,21 @@ describe("buildBrief — general feedback", () => {
   });
 
   it("counts toward the brief's measured size", () => {
-    const note = "x".repeat(500);
+    const long = "x".repeat(500);
 
-    expect(measureBrief(briefWithFeedback(note)).chars).toBe(
+    expect(measureBrief(briefWithFeedback(long)).chars).toBe(
       measureBrief(brief()).chars + 500,
     );
+  });
+});
+
+describe("briefFeedbackIds", () => {
+  it("is exactly the notes the brief carries, so they can be closed together", () => {
+    const open = note("still outstanding");
+    const sent = note("already answered", true);
+    const blank = note("   ");
+
+    expect(briefFeedbackIds(annotationsOf([], [open, sent, blank]))).toEqual([open.id]);
   });
 });
 

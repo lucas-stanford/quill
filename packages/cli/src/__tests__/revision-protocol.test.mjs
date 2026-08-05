@@ -141,35 +141,43 @@ describe("validateRevisionBrief", () => {
     assert.equal("instruction" in result.brief, false);
   });
 
-  it("carries general feedback through to the queue file", () => {
+  it("carries general feedback through to the queue file, note by note", () => {
     // The validated brief is what a parent agent reads out of
     // .quill/revision-request.json, so a field dropped here is a field the
-    // reviewer typed and the agent never sees.
+    // reviewer typed and the agent never sees. Notes stay separate: two
+    // objections flattened into one string get answered as one.
     const result = validateRevisionBrief({
       markdown: "x",
-      feedback: "This is three milestones pretending to be one.",
+      feedback: ["This is three milestones pretending to be one.", "No deploy story."],
     });
 
     assert.equal(result.ok, true);
-    assert.equal(result.brief.feedback, "This is three milestones pretending to be one.");
+    assert.deepEqual(result.brief.feedback, [
+      "This is three milestones pretending to be one.",
+      "No deploy story.",
+    ]);
   });
 
   it("keeps feedback and instruction as separate fields", () => {
     const result = validateRevisionBrief({
       markdown: "x",
-      feedback: "standing",
+      feedback: ["standing"],
       instruction: "one-off",
     });
 
     assert.equal(result.ok, true);
-    assert.equal(result.brief.feedback, "standing");
+    assert.deepEqual(result.brief.feedback, ["standing"]);
     assert.equal(result.brief.instruction, "one-off");
   });
 
-  it("drops whitespace-only feedback", () => {
-    const result = validateRevisionBrief({ markdown: "x", feedback: "  \n " });
-    assert.equal(result.ok, true);
-    assert.equal("feedback" in result.brief, false);
+  it("drops whitespace-only notes, and the key when none survive", () => {
+    const some = validateRevisionBrief({ markdown: "x", feedback: ["  \n ", "real"] });
+    assert.equal(some.ok, true);
+    assert.deepEqual(some.brief.feedback, ["real"]);
+
+    const none = validateRevisionBrief({ markdown: "x", feedback: ["  ", ""] });
+    assert.equal(none.ok, true);
+    assert.equal("feedback" in none.brief, false);
   });
 
   it("names the offending field, because a human debugs against this", () => {
@@ -183,7 +191,8 @@ describe("validateRevisionBrief", () => {
       [{ markdown: "x", edits: [{ kind: "moved", text: "x" }] }, /must be "insertion" or "deletion"/],
       [{ markdown: "x", edits: [{ kind: "insertion", context: 7 }] }, /edits\[0\]\.context must be a string/],
       [{ markdown: "x", instruction: 3 }, /brief\.instruction must be a string/],
-      [{ markdown: "x", feedback: 3 }, /brief\.feedback must be a string/],
+      [{ markdown: "x", feedback: 3 }, /brief\.feedback must be an array/],
+      [{ markdown: "x", feedback: [7] }, /brief\.feedback\[0\] must be a string/],
     ];
     for (const [value, pattern] of cases) {
       const result = validateRevisionBrief(value);

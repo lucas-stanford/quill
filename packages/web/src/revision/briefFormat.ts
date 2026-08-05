@@ -51,10 +51,8 @@ export interface BriefMeasure {
 
 /** Size of a brief, for a caller that wants to warn before sending it. */
 export function measureBrief(brief: RevisionBrief): BriefMeasure {
-  let chars =
-    brief.markdown.length +
-    (brief.feedback?.length ?? 0) +
-    (brief.instruction?.length ?? 0);
+  let chars = brief.markdown.length + (brief.instruction?.length ?? 0);
+  for (const note of brief.feedback ?? []) chars += note.length;
   for (const comment of brief.comments) {
     chars += comment.quote.length + comment.body.length;
     for (const reply of comment.replies) chars += reply.length;
@@ -80,9 +78,14 @@ export function isBriefEmpty(brief: RevisionBrief): boolean {
   return (
     brief.comments.length === 0 &&
     brief.edits.length === 0 &&
-    (brief.feedback ?? "").trim() === "" &&
+    feedbackNotes(brief).length === 0 &&
     (brief.instruction ?? "").trim() === ""
   );
+}
+
+/** The feedback notes that say something, trimmed. */
+function feedbackNotes(brief: RevisionBrief): string[] {
+  return (brief.feedback ?? []).map((note) => note.trim()).filter((note) => note !== "");
 }
 
 /** The author label shown to the agent; the sidecar's placeholder is not one. */
@@ -261,18 +264,20 @@ export function formatBriefPrompt(brief: RevisionBrief): string {
     );
   }
 
-  const feedback = (brief.feedback ?? "").trim();
-  if (feedback) {
+  const feedback = feedbackNotes(brief);
+  if (feedback.length > 0) {
     sections.push(
       [
-        "=== FEEDBACK ON THE PLAN AS A WHOLE ===",
+        `=== FEEDBACK ON THE PLAN AS A WHOLE (${feedback.length}) ===`,
         "",
         "Standing feedback the reviewer left about the plan itself rather than about",
         "any one sentence — its shape, what is missing, what it is for. Act on it by",
         "changing the plan's structure and content, not by adding a paragraph that",
         "talks about the feedback.",
         "",
-        feedback,
+        "Each numbered note is a separate objection. Address every one of them.",
+        "",
+        feedback.map((note, i) => `${i + 1}. ${note}`).join("\n\n"),
       ].join("\n"),
     );
   }

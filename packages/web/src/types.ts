@@ -98,17 +98,36 @@ export interface Comment {
 /** Authorship of a tracked change. */
 export type ChangeAuthor = "human" | "ai";
 
+/**
+ * One note about the plan as a whole.
+ *
+ * A list rather than one block of prose because feedback arrives as separate
+ * thoughts — "this is three milestones, not one" and "you never say how it
+ * deploys" are two objections, and an agent that is handed them as one
+ * paragraph tends to answer the first and forget the second. Each entry is
+ * resolved independently, the same way a comment thread is.
+ */
+export interface FeedbackEntry {
+  id: string;
+  body: string;
+  /** ISO 8601. */
+  createdAt: string;
+  resolved: boolean;
+}
+
 /** The review sidecar, versioned so the schema can move. */
 export interface Sidecar {
   version: 1;
   comments: Comment[];
   /**
    * Feedback about the plan as a whole — the notes that are not about any one
-   * sentence ("this is three milestones, not one", "you never say how it is
-   * deployed"). Omitted entirely when empty, so a sidecar written before this
-   * field existed round-trips byte-identically.
+   * sentence. Omitted entirely when there is none, so a sidecar written before
+   * this field existed round-trips byte-identically.
+   *
+   * Read tolerantly: an early build wrote a bare string here, and that is
+   * accepted and migrated to a single entry rather than discarded.
    */
-  feedback?: string;
+  feedback?: FeedbackEntry[];
 }
 
 export const EMPTY_SIDECAR: Sidecar = { version: 1, comments: [] };
@@ -177,8 +196,8 @@ export interface RevisionBrief {
   markdown: string;
   comments: BriefComment[];
   edits: BriefEdit[];
-  /** Standing feedback about the plan as a whole, from the rail's panel. */
-  feedback?: string;
+  /** Standing feedback about the plan as a whole, one string per note. */
+  feedback?: string[];
   /** Freeform note from the update dialog. */
   instruction?: string;
 }

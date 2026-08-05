@@ -4,7 +4,7 @@ import type { TrackedChangesApi } from "../tracking";
 import type { RevisionState, RevisionStatus } from "../types";
 import { cancelRevision, fetchRevision, requestRevision } from "../api";
 import { composeBrief, renderPrompt, withInstruction } from "./compose";
-import { briefCommentIds } from "./buildBrief";
+import { briefCommentIds, briefFeedbackIds } from "./buildBrief";
 import { decideApply } from "./applyPlan";
 import { runRevision, timerDelay } from "./runner";
 import { NOTHING_TO_SEND, transportFailure } from "./status";
@@ -100,6 +100,8 @@ export function useRevision({
    * `land`.
    */
   const sentCommentIdsRef = useRef<string[]>([]);
+  /** The feedback notes that went out with it, closed on the same event. */
+  const sentFeedbackIdsRef = useRef<string[]>([]);
 
   /**
    * The brief as it stands. Rebuilt when — and only when — the plan, the
@@ -185,7 +187,9 @@ export function useRevision({
        * deleting them.
        */
       annotationsRef.current.resolveMany(sentCommentIdsRef.current, true);
+      annotationsRef.current.resolveFeedbackMany(sentFeedbackIdsRef.current, true);
       sentCommentIdsRef.current = [];
+      sentFeedbackIdsRef.current = [];
       settle("done", null);
     },
     [settle],
@@ -208,6 +212,7 @@ export function useRevision({
 
       baselineRef.current = markdownRef.current;
       sentCommentIdsRef.current = briefCommentIds(annotationsRef.current);
+      sentFeedbackIdsRef.current = briefFeedbackIds(annotationsRef.current);
       const controller = new AbortController();
       abortRef.current = controller;
       settle("queued", null);

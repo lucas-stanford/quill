@@ -27,6 +27,13 @@ export interface AppShellProps {
   toolbar?: ReactNode;
   /** Comment bubbles, rendered in the right margin beside the page. */
   commentRail?: ReactNode;
+  /**
+   * Feedback on the plan as a whole, in the LEFT margin. It is its own rail
+   * rather than a panel in the comment rail because the comment rail measures
+   * bubble positions from the top of its bubble layer, so anything stacked in
+   * that column shifts every anchor off its text.
+   */
+  feedbackRail?: ReactNode;
   /** Tracked-change controls. M4 surfaces accept/reject from here. */
   tracking?: TrackedChangesApi;
   /** The Update with AI control. Render it in the title bar. */
@@ -48,6 +55,7 @@ export function AppShell({
   saveState,
   toolbar,
   commentRail,
+  feedbackRail,
   tracking,
   updateWithAI,
   approveButton,
@@ -111,6 +119,7 @@ export function AppShell({
 
       <main className="page-canvas">
         <div className="page-canvas-inner">
+          {feedbackRail}
           <div className="page-sheet" ref={sheetRef}>
             {status === "loading" && <LoadingSkeleton />}
             {status === "error" && (

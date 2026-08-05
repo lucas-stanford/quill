@@ -8,7 +8,14 @@
  */
 import { basename, dirname, extname, join } from "node:path";
 import { hashContent } from "./hash.js";
-import type { Comment, CommentReply, SaveAnnotationsRequest, Sidecar, TextAnchor } from "./types.js";
+import type {
+  Comment,
+  CommentReply,
+  FeedbackEntry,
+  SaveAnnotationsRequest,
+  Sidecar,
+  TextAnchor,
+} from "./types.js";
 
 /** The only schema version this build understands. */
 export const SIDECAR_VERSION = 1;
@@ -137,6 +144,43 @@ function readComment(value: unknown, where: string): Comment {
 }
 
 /**
+ * Reads the `feedback` field, tolerating the shape an earlier build wrote.
+ *
+ * A bare string was the original schema and is migrated to a single entry
+ * rather than dropped: a reviewer's note is not worth losing over a format
+ * change, and both forms are unambiguous. Entries with no text are discarded —
+ * they ask the agent for nothing and would render as blank rows.
+ */
+function readFeedback(value: unknown, where: string): FeedbackEntry[] {
+  if (value === undefined || value === null) return [];
+
+  if (typeof value === "string") {
+    const body = value;
+    if (body.trim().length === 0) return [];
+    return [
+      {
+        id: `migrated-${hashContent(body).slice(0, 12)}`,
+        body,
+        createdAt: new Date(0).toISOString(),
+        resolved: false,
+      },
+    ];
+  }
+
+  return requireArray(value, where)
+    .map((entry, i) => {
+      const raw = requireRecord(entry, `${where}[${i}]`);
+      return {
+        id: requireId(raw.id, `${where}[${i}].id`),
+        body: requireString(raw.body, `${where}[${i}].body`),
+        createdAt: requireString(raw.createdAt, `${where}[${i}].createdAt`),
+        resolved: requireBoolean(raw.resolved, `${where}[${i}].resolved`),
+      };
+    })
+    .filter((entry) => entry.body.trim().length > 0);
+}
+
+/**
  * Validates a decoded sidecar and normalizes it to exactly the documented
  * shape — unknown keys are dropped, so what lands on disk always matches the
  * schema the `version` field advertises.
@@ -168,13 +212,11 @@ export function validateSidecar(value: unknown, where = "sidecar"): SidecarParse
 
     /*
      * Empty and absent are the same state, and only one of them may reach the
-     * file: an empty string here would rewrite every sidecar written before
+     * file: an empty array here would rewrite every sidecar written before
      * this field existed, for no change the reviewer made.
      */
-    if (raw.feedback !== undefined && raw.feedback !== null) {
-      const feedback = requireString(raw.feedback, `${where}.feedback`);
-      if (feedback.trim().length > 0) sidecar.feedback = feedback;
-    }
+    const feedback = readFeedback(raw.feedback, `${where}.feedback`);
+    if (feedback.length > 0) sidecar.feedback = feedback;
 
     return { ok: true, sidecar };
   } catch (err) {

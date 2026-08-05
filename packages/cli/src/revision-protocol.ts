@@ -181,8 +181,10 @@ export function validateRevisionBrief(value: unknown, where = "brief"): BriefRes
       ),
     };
     if (raw.feedback !== undefined && raw.feedback !== null) {
-      const feedback = requireString(raw.feedback, `${where}.feedback`);
-      if (feedback.trim().length > 0) brief.feedback = feedback;
+      const feedback = optionalArray(raw.feedback, `${where}.feedback`)
+        .map((note, i) => requireString(note, `${where}.feedback[${i}]`))
+        .filter((note) => note.trim().length > 0);
+      if (feedback.length > 0) brief.feedback = feedback;
     }
     if (raw.instruction !== undefined && raw.instruction !== null) {
       const instruction = requireString(raw.instruction, `${where}.instruction`);

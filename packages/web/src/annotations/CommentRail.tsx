@@ -267,6 +267,10 @@ export function CommentRail({ annotations }: CommentRailProps) {
               }}
               onResolve={() => annotations.resolve(comment.id, !comment.resolved)}
               onDelete={() => annotations.remove(comment.id)}
+              onEdit={(body) => annotations.editComment(comment.id, body)}
+              onEditReply={(replyId, body) =>
+                annotations.editReply(comment.id, replyId, body)
+              }
             />
           );
         })}
@@ -289,7 +293,7 @@ export function CommentRail({ annotations }: CommentRailProps) {
           <p className="comment-rail-empty">
             Select text in the plan and a <strong>Comment</strong> button appears beside
             it — or press ⌘⌥M. Notes land here, level with their text. For anything
-            about the plan as a whole, use <strong>Feedback on the plan</strong> below.
+            about the plan as a whole, use the panel on the left.
           </p>
         ) : null}
       </div>
@@ -303,55 +307,10 @@ export function CommentRail({ annotations }: CommentRailProps) {
         />
       ) : null}
 
-      {/*
-       * Below the bubble layer, never above it. Anchor tops are measured from
-       * the layer's own top edge (useAnnotations.measure), so anything stacked
-       * on top of it would shift that origin and every bubble would sit lower
-       * than the text it points at.
-       */}
-      <GeneralFeedback value={annotations.feedback} onChange={annotations.setFeedback} />
-
       <div className="comment-rail-footer">
         <SyncBadge internal={internal} count={comments.length} />
       </div>
     </div>
-  );
-}
-
-/* ── General feedback ─────────────────────────────────────────────────────
-   The notes that are not about any one sentence.
-
-   Not every objection has a quote to hang on. "This is three milestones, not
-   one" or "you never say how it deploys" is about the shape of the plan, and
-   forcing it onto an arbitrary paragraph makes it read as a local nitpick —
-   the agent then rewrites that paragraph instead of the plan. So this is a
-   first-class field: it persists in the sidecar beside the comments and goes
-   to the agent as its own section of the brief.
-
-   It sits BELOW the bubble layer on purpose; see the call site. */
-
-interface GeneralFeedbackProps {
-  value: string;
-  onChange: (value: string) => void;
-}
-
-function GeneralFeedback({ value, onChange }: GeneralFeedbackProps) {
-  const id = "quill-general-feedback";
-  return (
-    <section className="general-feedback" aria-labelledby={`${id}-label`}>
-      <label className="general-feedback-label" id={`${id}-label`} htmlFor={id}>
-        Feedback on the plan
-      </label>
-      <textarea
-        id={id}
-        className="general-feedback-input"
-        value={value}
-        placeholder="Anything about the plan as a whole — its shape, what is missing, what it is for."
-        onChange={(event) => onChange(event.target.value)}
-        rows={3}
-        spellCheck
-      />
-    </section>
   );
 }
 
@@ -394,6 +353,8 @@ interface CommentBubbleProps {
   onReply: (body: string) => void;
   onResolve: () => void;
   onDelete: () => void;
+  onEdit: (body: string) => void;
+  onEditReply: (replyId: string, body: string) => void;
 }
 
 function CommentBubble({
@@ -409,7 +370,13 @@ function CommentBubble({
   onReply,
   onResolve,
   onDelete,
+  onEdit,
+  onEditReply,
 }: CommentBubbleProps) {
+  /** Which part of the thread is open for editing: the note, or one reply. */
+  const [editing, setEditing] = useState<null | { kind: "body" } | { kind: "reply"; id: string }>(
+    null,
+  );
   const classes = ["comment-bubble"];
   if (active) classes.push("comment-bubble--active");
   if (comment.resolved) classes.push("comment-bubble--resolved");
@@ -442,7 +409,20 @@ function CommentBubble({
         </p>
       ) : null}
 
-      <p className="comment-body">{comment.body}</p>
+      {editing?.kind === "body" ? (
+        <Composer
+          placeholder="Edit this comment…"
+          submitLabel="Save"
+          initial={comment.body}
+          onCancel={() => setEditing(null)}
+          onSubmit={(body) => {
+            onEdit(body);
+            setEditing(null);
+          }}
+        />
+      ) : (
+        <p className="comment-body">{comment.body}</p>
+      )}
 
       {comment.replies.length > 0 ? (
         <ol className="comment-replies">
@@ -452,7 +432,29 @@ function CommentBubble({
               <time className="comment-time" dateTime={reply.createdAt}>
                 {formatTime(reply.createdAt)}
               </time>
-              <p className="comment-body">{reply.body}</p>
+              {editing?.kind === "reply" && editing.id === reply.id ? (
+                <Composer
+                  placeholder="Edit this reply…"
+                  submitLabel="Save"
+                  initial={reply.body}
+                  onCancel={() => setEditing(null)}
+                  onSubmit={(body) => {
+                    onEditReply(reply.id, body);
+                    setEditing(null);
+                  }}
+                />
+              ) : (
+                <>
+                  <p className="comment-body">{reply.body}</p>
+                  <button
+                    type="button"
+                    className="comment-action comment-action--inline"
+                    onClick={() => setEditing({ kind: "reply", id: reply.id })}
+                  >
+                    Edit
+                  </button>
+                </>
+              )}
             </li>
           ))}
         </ol>
@@ -465,10 +467,17 @@ function CommentBubble({
           onCancel={onReplyCancel}
           onSubmit={onReply}
         />
-      ) : (
+      ) : editing !== null ? null : (
         <footer className="comment-bubble-actions">
           <button type="button" className="comment-action" onClick={onReplyOpen}>
             Reply
+          </button>
+          <button
+            type="button"
+            className="comment-action"
+            onClick={() => setEditing({ kind: "body" })}
+          >
+            Edit
           </button>
           <button
             type="button"
@@ -538,10 +547,19 @@ interface ComposerProps {
   autoFocus?: boolean;
   onCancel: () => void;
   onSubmit: (body: string) => void;
+  /** Seed text. Present when the composer is editing something that exists. */
+  initial?: string;
 }
 
-function Composer({ placeholder, submitLabel, autoFocus, onCancel, onSubmit }: ComposerProps) {
-  const [value, setValue] = useState("");
+function Composer({
+  placeholder,
+  submitLabel,
+  autoFocus,
+  onCancel,
+  onSubmit,
+  initial,
+}: ComposerProps) {
+  const [value, setValue] = useState(initial ?? "");
   const areaRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
@@ -551,6 +569,16 @@ function Composer({ placeholder, submitLabel, autoFocus, onCancel, onSubmit }: C
        comment is about — fatal now that drafting starts at the selection. */
     if (autoFocus) areaRef.current?.focus({ preventScroll: true });
   }, [autoFocus]);
+
+  useEffect(() => {
+    /* Editing puts the caret after the existing text, so the reviewer is
+       amending rather than retyping. */
+    if (initial === undefined) return;
+    const area = areaRef.current;
+    if (!area) return;
+    area.focus({ preventScroll: true });
+    area.setSelectionRange(area.value.length, area.value.length);
+  }, [initial]);
 
   const submit = () => {
     if (!value.trim()) return;

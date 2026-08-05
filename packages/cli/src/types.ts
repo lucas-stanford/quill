@@ -103,6 +103,19 @@ export interface Comment {
 /** Authorship of a tracked change. */
 export type ChangeAuthor = "human" | "ai";
 
+/**
+ * One note about the plan as a whole. A list rather than one block of prose
+ * because feedback arrives as separate thoughts, and each is resolved
+ * independently the way a comment thread is.
+ */
+export interface FeedbackEntry {
+  id: string;
+  body: string;
+  /** ISO 8601. */
+  createdAt: string;
+  resolved: boolean;
+}
+
 /** The review sidecar, versioned so the schema can move. */
 export interface Sidecar {
   version: 1;
@@ -110,9 +123,10 @@ export interface Sidecar {
   /**
    * Feedback about the plan as a whole, not anchored to any one sentence.
    * Omitted when empty so sidecars written before this field round-trip
-   * byte-identically.
+   * byte-identically. A bare string, which an early build wrote, is accepted
+   * and migrated to a single entry.
    */
-  feedback?: string;
+  feedback?: FeedbackEntry[];
 }
 
 export const EMPTY_SIDECAR: Sidecar = { version: 1, comments: [] };
@@ -158,8 +172,8 @@ export interface RevisionBrief {
   markdown: string;
   comments: BriefComment[];
   edits: BriefEdit[];
-  /** Standing feedback about the plan as a whole, from the rail's panel. */
-  feedback?: string;
+  /** Standing feedback about the plan as a whole, one string per note. */
+  feedback?: string[];
   /** Freeform note from the update dialog. */
   instruction?: string;
 }

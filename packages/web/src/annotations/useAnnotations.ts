@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Editor } from "@tiptap/react";
 import type { EditorView } from "@tiptap/pm/view";
-import type { Comment, CommentReply, Sidecar, TextAnchor } from "../types";
+import type { Comment, CommentReply, FeedbackEntry, Sidecar, TextAnchor } from "../types";
 import { fetchAnnotations, saveAnnotations } from "../api";
 import { buildDocText, trimRange } from "./docText";
 import { measureSelectionGeometry } from "./selectionGeometry";
@@ -53,6 +53,10 @@ export interface AnnotationsApi {
   addComment: (body: string) => void;
   addReply: (commentId: string, body: string) => void;
   resolve: (commentId: string, resolved: boolean) => void;
+  /** Rewrites a thread's opening note. */
+  editComment: (commentId: string, body: string) => void;
+  /** Rewrites one reply in a thread. */
+  editReply: (commentId: string, replyId: string, body: string) => void;
   /**
    * Resolve several threads at once — what the AI round trip uses to close the
    * notes it was just asked to act on, in one state update and one save.
@@ -65,8 +69,16 @@ export interface AnnotationsApi {
   /** Unresolved comments, in document order — the M4 revision brief uses this. */
   forBrief: () => Comment[];
   /** Standing feedback about the plan as a whole. Persisted in the sidecar. */
-  feedback: string;
-  setFeedback: (feedback: string) => void;
+  feedback: FeedbackEntry[];
+  /** Adds a note. Empty and whitespace-only bodies are ignored. */
+  addFeedback: (body: string) => void;
+  editFeedback: (id: string, body: string) => void;
+  removeFeedback: (id: string) => void;
+  resolveFeedback: (id: string, resolved: boolean) => void;
+  /** Closes several notes at once — what the AI round trip uses. */
+  resolveFeedbackMany: (ids: readonly string[], resolved: boolean) => void;
+  /** Unresolved notes with something in them, oldest first. */
+  feedbackForBrief: () => FeedbackEntry[];
   sidecar: Sidecar;
 }
 
@@ -111,9 +123,39 @@ function isComment(value: unknown): value is Comment {
   );
 }
 
-/** The sidecar is a file on disk a human can edit — never trust its shape. */
-function readFeedback(sidecar: Sidecar | undefined | null): string {
-  return typeof sidecar?.feedback === "string" ? sidecar.feedback : "";
+/**
+ * The sidecar is a file on disk a human can edit — never trust its shape.
+ *
+ * A bare string is what an earlier build wrote here; it is migrated to a single
+ * entry rather than dropped, because a reviewer's note is not worth losing over
+ * a format change.
+ */
+function readFeedback(sidecar: Sidecar | undefined | null): FeedbackEntry[] {
+  const raw: unknown = sidecar?.feedback;
+
+  if (typeof raw === "string") {
+    return raw.trim() === ""
+      ? []
+      : [{ id: newId(), body: raw, createdAt: new Date(0).toISOString(), resolved: false }];
+  }
+  if (!Array.isArray(raw)) return [];
+
+  return raw
+    .filter(
+      (entry): entry is FeedbackEntry =>
+        !!entry &&
+        typeof entry === "object" &&
+        typeof (entry as FeedbackEntry).id === "string" &&
+        typeof (entry as FeedbackEntry).body === "string",
+    )
+    .map((entry) => ({
+      id: entry.id,
+      body: entry.body,
+      createdAt:
+        typeof entry.createdAt === "string" ? entry.createdAt : new Date().toISOString(),
+      resolved: entry.resolved === true,
+    }))
+    .filter((entry) => entry.body.trim() !== "");
 }
 
 /**
@@ -121,9 +163,10 @@ function readFeedback(sidecar: Sidecar | undefined | null): string {
  * empty so a plan reviewed before the panel existed is not rewritten by merely
  * being opened — the save effect compares this JSON against what was read.
  */
-function buildSidecar(comments: readonly Comment[], feedback: string): Sidecar {
+function buildSidecar(comments: readonly Comment[], feedback: readonly FeedbackEntry[]): Sidecar {
   const sidecar: Sidecar = { version: 1, comments: [...comments] };
-  if (feedback.trim() !== "") sidecar.feedback = feedback;
+  const notes = feedback.filter((entry) => entry.body.trim() !== "");
+  if (notes.length > 0) sidecar.feedback = notes;
   return sidecar;
 }
 
@@ -198,7 +241,7 @@ function scrollParent(el: HTMLElement | null): HTMLElement | null {
 
 export function useAnnotations({ editor, enabled }: UseAnnotationsOptions): AnnotationsApi {
   const [comments, setComments] = useState<Comment[]>([]);
-  const [feedback, setFeedbackState] = useState("");
+  const [feedback, setFeedback] = useState<FeedbackEntry[]>([]);
   const [resolutions, setResolutions] = useState<Resolutions>({});
   const [activeId, setActiveIdState] = useState<string | null>(null);
   const [draft, setDraft] = useState<DraftAnchor | null>(null);
@@ -388,7 +431,7 @@ export function useAnnotations({ editor, enabled }: UseAnnotationsOptions): Anno
         loadedRef.current = true;
         loadAttemptedRef.current = true;
         setComments(loaded);
-        setFeedbackState(loadedFeedback);
+        setFeedback(loadedFeedback);
         setSync("idle");
         setSyncDetail(null);
       })
@@ -413,22 +456,22 @@ export function useAnnotations({ editor, enabled }: UseAnnotationsOptions): Anno
    * runs again with the union instead of clobbering the file.
    */
   const adoptRemote = useCallback(
-    (remote: Sidecar, local: readonly Comment[], localFeedback: string): boolean => {
+    (remote: Sidecar, local: readonly Comment[], localFeedback: readonly FeedbackEntry[]): boolean => {
       const onDisk = sanitizeSidecar(remote);
       const diskFeedback = readFeedback(remote);
       const merged = mergeRemoteComments(onDisk, local, deletedRef.current);
       /*
-       * Standing feedback is a single field, so it cannot be merged the way a
-       * list of threads can. What is on screen wins — this is a one-reviewer
-       * product — except when there is nothing on screen to lose, which is how
-       * feedback written before this session is picked up rather than erased.
+       * Feedback notes are not anchored, so there is no place to merge them
+       * into. What is on screen wins — this is a one-reviewer product — except
+       * when there is nothing on screen to lose, which is how notes written
+       * before this session are picked up rather than erased.
        */
-      const takeFeedback = localFeedback.trim() === "" && diskFeedback.trim() !== "";
+      const takeFeedback = localFeedback.length === 0 && diskFeedback.length > 0;
       if (!merged && !takeFeedback) return false;
 
       savedJsonRef.current = JSON.stringify(buildSidecar(onDisk, diskFeedback));
       if (merged) setComments(merged);
-      if (takeFeedback) setFeedbackState(diskFeedback);
+      if (takeFeedback) setFeedback(diskFeedback);
       setSync("idle");
       setSyncDetail(null);
       return true;
@@ -445,7 +488,7 @@ export function useAnnotations({ editor, enabled }: UseAnnotationsOptions): Anno
         const current = await fetchAnnotations();
         revisionRef.current = current.revision;
         loadedRef.current = true;
-        if (adoptRemote(current.sidecar, next.comments, next.feedback ?? "")) return;
+        if (adoptRemote(current.sidecar, next.comments, next.feedback ?? [])) return;
       }
       const saved = await saveAnnotations(next, revisionRef.current);
       revisionRef.current = saved.revision;
@@ -460,7 +503,7 @@ export function useAnnotations({ editor, enabled }: UseAnnotationsOptions): Anno
         const current = await fetchAnnotations();
         revisionRef.current = current.revision;
         loadedRef.current = true;
-        if (adoptRemote(current.sidecar, next.comments, next.feedback ?? "")) return;
+        if (adoptRemote(current.sidecar, next.comments, next.feedback ?? [])) return;
         const saved = await saveAnnotations(next, revisionRef.current);
         revisionRef.current = saved.revision;
         savedJsonRef.current = json;
@@ -549,6 +592,39 @@ export function useAnnotations({ editor, enabled }: UseAnnotationsOptions): Anno
     setComments((prev) => prev.map((c) => (c.id === commentId ? { ...c, resolved } : c)));
   }, []);
 
+  /*
+   * Editing changes what the note SAYS, not where it points. The anchor is left
+   * exactly as it was: a reviewer rewording "expand this" into "expand this,
+   * with the rollback path" is clarifying the same objection about the same
+   * sentence, and re-anchoring on an edit would move a settled note for no
+   * reason. An edit to nothing removes the note rather than leaving a blank
+   * bubble that reaches the agent as an empty instruction.
+   */
+  const editComment = useCallback((commentId: string, body: string) => {
+    const text = body.trim();
+    if (text === "") {
+      deletedRef.current.add(commentId);
+      setComments((prev) => prev.filter((c) => c.id !== commentId));
+      setActiveIdState((prev) => (prev === commentId ? null : prev));
+      return;
+    }
+    setComments((prev) => prev.map((c) => (c.id === commentId ? { ...c, body: text } : c)));
+  }, []);
+
+  const editReply = useCallback((commentId: string, replyId: string, body: string) => {
+    const text = body.trim();
+    setComments((prev) =>
+      prev.map((c) => {
+        if (c.id !== commentId) return c;
+        const replies =
+          text === ""
+            ? c.replies.filter((r) => r.id !== replyId)
+            : c.replies.map((r) => (r.id === replyId ? { ...r, body: text } : r));
+        return { ...c, replies };
+      }),
+    );
+  }, []);
+
   const resolveMany = useCallback((commentIds: readonly string[], resolved: boolean) => {
     if (commentIds.length === 0) return;
     const wanted = new Set(commentIds);
@@ -565,8 +641,54 @@ export function useAnnotations({ editor, enabled }: UseAnnotationsOptions): Anno
     });
   }, []);
 
-  const setFeedback = useCallback((next: string) => {
-    setFeedbackState(next);
+  /* ── Feedback on the plan as a whole ──────────────────────────────────
+     Not anchored to anything, so none of the anchoring machinery applies —
+     these are a plain list, resolved the way comment threads are. */
+
+  const addFeedback = useCallback((body: string) => {
+    const text = body.trim();
+    if (!text) return;
+    setFeedback((prev) => [
+      ...prev,
+      { id: newId(), body: text, createdAt: new Date().toISOString(), resolved: false },
+    ]);
+  }, []);
+
+  const editFeedback = useCallback((id: string, body: string) => {
+    const text = body.trim();
+    setFeedback((prev) =>
+      prev.flatMap((entry) => {
+        if (entry.id !== id) return [entry];
+        // Editing a note to nothing is how you delete it — an empty note asks
+        // the agent for nothing and would render as a blank row.
+        return text === "" ? [] : [{ ...entry, body: text }];
+      }),
+    );
+  }, []);
+
+  const removeFeedback = useCallback((id: string) => {
+    setFeedback((prev) => prev.filter((entry) => entry.id !== id));
+  }, []);
+
+  const resolveFeedback = useCallback((id: string, resolved: boolean) => {
+    setFeedback((prev) =>
+      prev.map((entry) => (entry.id === id ? { ...entry, resolved } : entry)),
+    );
+  }, []);
+
+  const resolveFeedbackMany = useCallback((ids: readonly string[], resolved: boolean) => {
+    if (ids.length === 0) return;
+    const wanted = new Set(ids);
+    setFeedback((prev) => {
+      let changed = false;
+      const next = prev.map((entry) => {
+        if (!wanted.has(entry.id) || entry.resolved === resolved) return entry;
+        changed = true;
+        return { ...entry, resolved };
+      });
+      // Same array when nothing moved, so a no-op cannot dirty the sidecar.
+      return changed ? next : prev;
+    });
   }, []);
 
   const remove = useCallback((commentId: string) => {
@@ -718,6 +840,11 @@ export function useAnnotations({ editor, enabled }: UseAnnotationsOptions): Anno
    */
   const forBrief = useCallback(() => selectForBrief(ordered), [ordered]);
 
+  const feedbackForBrief = useCallback(
+    () => feedback.filter((entry) => !entry.resolved && entry.body.trim() !== ""),
+    [feedback],
+  );
+
   const api: AnnotationsApi = {
     comments: ordered,
     orphans,
@@ -725,12 +852,19 @@ export function useAnnotations({ editor, enabled }: UseAnnotationsOptions): Anno
     addReply,
     resolve,
     resolveMany,
+    editComment,
+    editReply,
     remove,
     activeId,
     setActiveId,
     forBrief,
     feedback,
-    setFeedback,
+    addFeedback,
+    editFeedback,
+    removeFeedback,
+    resolveFeedback,
+    resolveFeedbackMany,
+    feedbackForBrief,
     sidecar,
   };
 

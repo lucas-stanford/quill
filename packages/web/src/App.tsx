@@ -7,6 +7,7 @@ import { useTrackedChanges } from "./tracking";
 import { useRevision, UpdateWithAI } from "./revision";
 import { useApprove, ApproveButton } from "./approve";
 import { useCompanions, CompanionDrawer, CompanionTabs } from "./companions";
+import { FeedbackRail } from "./feedback";
 import { ConflictError, fetchPlan, savePlan } from "./api";
 import type { LoadStatus, PlanResponse, SaveState } from "./types";
 
@@ -165,6 +166,9 @@ export default function App() {
       toolbar={status === "ready" ? <Ribbon editor={editor} /> : null}
       commentRail={
         status === "ready" ? <CommentRail annotations={annotations} /> : null
+      }
+      feedbackRail={
+        status === "ready" ? <FeedbackRail annotations={annotations} /> : null
       }
       tracking={status === "ready" ? tracking : undefined}
       approveButton={status === "ready" ? <ApproveButton approve={approve} /> : null}

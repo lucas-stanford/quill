@@ -19,12 +19,13 @@ quill PLAN.md          # opens the plan in your browser, blocks until you are do
 2. Select a phrase; a **Comment** button appears beside it. Leave a margin note.
 3. Click into the text and strike a paragraph you disagree with. There is no edit mode to
    turn on — the formatting ribbon follows your caret and leaves when it does.
-4. For anything the plan gets wrong as a whole, use **Feedback on the plan** in the margin.
-   Not every objection has a sentence to hang on.
+4. For anything the plan gets wrong as a whole, use **Feedback on the plan** in the left
+   margin. Not every objection has a sentence to hang on. Enter adds a note, so two
+   objections stay two notes and the agent has to answer both.
 5. Press **Update with AI**. Your comments, edits and feedback become a brief, the agent
    rewrites the plan, and the rewrite comes back as **tracked changes** — accept or reject
-   each one. The comments it was asked to act on are resolved for you; reopen any you
-   disagree with.
+   each one. The comments and feedback notes it was asked to act on are resolved for you,
+   so what is still outstanding is whatever is still open; reopen any you disagree with.
 6. Press **Approve**. The CLI exits, optionally turning the plan into a ticket board first.
 
 `PLAN.md` stays clean markdown the whole time. Comments, threads and your general feedback
@@ -155,7 +156,7 @@ The handoff is optional. A missing `fer` is reported, never fatal.
 | Path | |
 |---|---|
 | `PLAN.md` | your plan — clean, diffable markdown, the source of truth |
-| `PLAN.quill.json` | comments and threads (anchored by quoted text), plus your general feedback |
+| `PLAN.quill.json` | comments and threads (anchored by quoted text), plus your feedback notes |
 | `research.md`, `reference.md` | optional companions — read-only tabs beside the plan |
 | `.quill/` | transient revision request/response, attached mode only |
 
@@ -169,7 +170,7 @@ sentence.
 ```bash
 pnpm install
 pnpm build          # web bundle, then the CLI that embeds it
-pnpm test           # 470 tests
+pnpm test           # 475 tests
 pnpm typecheck
 ```
 

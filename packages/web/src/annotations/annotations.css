@@ -366,56 +366,6 @@
   border-top: 1px solid var(--color-comment-border, var(--_qc-border));
 }
 
-/* ── General feedback ───────────────────────────────────────────────────
-   Aligned with the bubbles' left edge (LEADER_GUTTER = 28px) so the rail
-   reads as one column, but deliberately without a leader line: it points at
-   the whole plan, not at a line in it. */
-
-.general-feedback {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  margin: 14px 0 0 28px;
-}
-
-.general-feedback-label {
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--color-text-muted, #8a8a8e);
-}
-
-.general-feedback-input {
-  width: 100%;
-  box-sizing: border-box;
-  /*
-   * Fixed height with its own scrollbar. A textarea that grew as you typed
-   * would move the footer under it and, on a narrow window where the rail
-   * overlays the page, change what the rail covers while you are mid-sentence.
-   */
-  height: 76px;
-  resize: none;
-  padding: 8px 9px;
-  font-family: inherit;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--color-text, #e6e6e6);
-  background: var(--color-comment-bg, var(--_qc-bg));
-  border: 1px solid var(--color-comment-border, var(--_qc-border));
-  border-radius: 6px;
-}
-
-.general-feedback-input::placeholder {
-  color: var(--color-text-muted, #8a8a8e);
-}
-
-.general-feedback-input:focus-visible {
-  outline: none;
-  border-color: var(--color-accent, #4fa3e0);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent, #4fa3e0) 28%, transparent);
-}
-
 /* ── Footer ─────────────────────────────────────────────────────────── */
 
 .comment-rail-footer {
@@ -452,4 +402,22 @@
   .ProseMirror .quill-anchor {
     transition: none;
   }
+}
+
+/* Inline edit affordance inside a reply, where there is no action footer. */
+.comment-action--inline {
+  margin-top: 3px;
+  padding: 0;
+  font-size: 10.5px;
+  color: var(--color-text-muted, #8a8a8e);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.comment-action--inline:hover,
+.comment-action--inline:focus-visible {
+  color: var(--color-text, #e6e6e6);
+  text-decoration: underline;
+  outline: none;
 }
