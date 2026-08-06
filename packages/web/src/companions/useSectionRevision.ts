@@ -48,13 +48,47 @@ export interface UseSectionRevisionOptions {
   markdown: string;
   /** How a landed result is written back. */
   onResult: (markdown: string) => void;
+  /**
+   * A finished "find examples" request. It writes a manifest and image files,
+   * not the document, so there is nothing to splice — the gallery just re-reads
+   * what is now on disk.
+   */
+  onExamples?: () => void;
 }
 
 /** What the agent is told to do, rendered from the scope. */
 export function renderSectionPrompt(scope: RevisionScope): string {
   const lines: string[] = [];
 
-  if (scope.kind === "add") {
+  if (scope.kind === "examples") {
+    lines.push(
+      "Go and find EXAMPLES of how other people did this, and bring back pictures.",
+      "Screenshots of real screens are the point: a screen list written out in prose",
+      "is a checklist, and four shots of how comparable products actually did that",
+      "screen is an argument.",
+      "",
+      "Where to put them, beside the plan:",
+      "- The images in `research/examples/` — png, jpg, webp, gif or avif.",
+      "- One entry each in `research/examples.json`:",
+      "",
+      '  { "version": 1, "examples": [',
+      '    { "id": "…", "title": "Slay the Spire — main menu",',
+      '      "source": "https://…", "note": "Three buttons, no submenu.",',
+      '      "image": "slay-the-spire-menu.png", "tags": ["main menu"],',
+      '      "addedAt": "2026-08-05T00:00:00.000Z" } ] }',
+      "",
+      "- KEEP any entries already in that file. You are adding to a gallery, not",
+      "  replacing one.",
+      "",
+      "Rules:",
+      "- Every example carries its `source` URL. A screenshot with no source is not",
+      "  evidence, it is a picture.",
+      "- Capture the real thing where you can rather than taking marketing art.",
+      "- `note` says what this shot SHOWS that is worth copying or avoiding.",
+      "- Six good examples beat twenty near-duplicates.",
+      "- Do not edit the research document itself for this.",
+    );
+  } else if (scope.kind === "add") {
     lines.push(
       `Open a NEW line of enquiry and append it to ${scope.document} as its own \`##\``,
       "section, at the end. Do not alter any section that is already there.",
@@ -76,6 +110,11 @@ export function renderSectionPrompt(scope: RevisionScope): string {
         ? "Replace that section with the fuller version."
         : "Leave it where it is and add the fuller version after it.",
     );
+  }
+
+  if (scope.kind === "examples") {
+    if (scope.note) lines.push("", "=== WHAT TO LOOK FOR ===", "", scope.note);
+    return lines.join("\n") + "\n";
   }
 
   lines.push(
@@ -106,6 +145,7 @@ export function useSectionRevision({
   document,
   markdown,
   onResult,
+  onExamples,
 }: UseSectionRevisionOptions): SectionRevisionApi {
   const [status, setStatus] = useState<RevisionStatus>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -117,6 +157,8 @@ export function useSectionRevision({
   markdownRef.current = markdown;
   const onResultRef = useRef(onResult);
   onResultRef.current = onResult;
+  const onExamplesRef = useRef(onExamples);
+  onExamplesRef.current = onExamples;
 
   const dismiss = useCallback(() => {
     setUndo(null);
@@ -147,12 +189,23 @@ export function useSectionRevision({
       setStatus("queued");
       setError(null);
       setUndo(null);
-      setPending(section?.title ?? "a new line of enquiry");
+      setPending(
+        kind === "examples"
+          ? "examples"
+          : (section?.title ?? "a new line of enquiry"),
+      );
 
       /** The document as it stood, so a bad answer costs one click. */
       const before = markdownRef.current;
 
       const land = (answer: string) => {
+        if (kind === "examples") {
+          // The answer is a manifest and some image files, not prose. Nothing
+          // is spliced; the gallery re-reads what is now on disk.
+          onExamplesRef.current?.();
+          setStatus("done");
+          return;
+        }
         const cleaned = stripFence(answer).trim();
         if (cleaned === "") {
           setStatus("failed");

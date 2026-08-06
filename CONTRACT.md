@@ -29,6 +29,8 @@ packaging metadata — **not** to add, remove or upgrade a dependency.
 ```
 GET      /api/companions      research.md / reference.md
 GET/PUT  /api/companions/:name  editable; PUT is revision-guarded
+GET/PUT  /api/examples        the screenshot gallery's manifest
+GET      /api/examples/media/:file
 GET/PUT  /api/plan            M1/M2
 GET      /api/live            M2 (SSE)
 GET/PUT  /api/annotations     M3
@@ -81,7 +83,7 @@ Frozen signatures are in `approve/useApprove.ts` and `approve/ApproveButton.tsx`
 pnpm install
 pnpm typecheck && pnpm build && pnpm test
 ```
-**508 tests pass at head** (187 CLI via node:test, 321 web via vitest). Do not regress them.
+**521 tests pass at head** (198 CLI via node:test, 323 web via vitest). Do not regress them.
 
 ## Definition of done for your lane
 

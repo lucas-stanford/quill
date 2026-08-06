@@ -374,3 +374,104 @@
 .companion-panel {
   position: relative;
 }
+
+/* ── Views ──────────────────────────────────────────────────────────────── */
+
+.companion-views {
+  display: flex;
+  gap: 4px;
+}
+
+.companion-action[data-active] {
+  color: var(--color-text, #e6e6e6);
+  border-color: var(--color-text-muted, #8a8a8e);
+}
+
+/* ── Gallery ────────────────────────────────────────────────────────────── */
+
+.companion-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.companion-example {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--color-titlebar-bg, #1c1c1f);
+  border: 1px solid var(--color-titlebar-border, #2d2d30);
+  border-radius: 8px;
+}
+
+.companion-example-shot {
+  display: block;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  background: var(--color-canvas, #17171a);
+}
+
+.companion-example-shot img {
+  width: 100%;
+  height: 100%;
+  /* Contain, not cover: a cropped screenshot is a screenshot of something
+     else, and the point of this gallery is what the screen actually is. */
+  object-fit: contain;
+  display: block;
+}
+
+.companion-example-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 9px 10px;
+  font-family: var(--font-chrome, system-ui, sans-serif);
+}
+
+.companion-example-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text, #e6e6e6);
+}
+
+.companion-example-note {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--color-text-muted, #8a8a8e);
+}
+
+.companion-example-source,
+.companion-example-nosource {
+  font-size: 10.5px;
+  color: var(--color-text-muted, #8a8a8e);
+}
+
+.companion-example-nosource {
+  color: var(--color-danger, #e06c6c);
+}
+
+.companion-example-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.companion-gallery-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  max-width: 44ch;
+  margin: 40px auto;
+  font-family: var(--font-chrome, system-ui, sans-serif);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--color-text-muted, #8a8a8e);
+}
+
+.companion-gallery-empty p {
+  margin: 0;
+}

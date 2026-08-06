@@ -195,7 +195,7 @@ When `target` is `"research"`:
 | `scope.document` | the file to edit, always beside the plan |
 | `scope.heading` | the section's heading, verbatim |
 | `scope.text` | that section exactly as it stands right now |
-| `scope.kind` | `redo` (it is unreliable, go again), `deepen` (keep it, go further), `add` (a new line of enquiry) |
+| `scope.kind` | `redo` (it is unreliable, go again), `deepen` (keep it, go further), `add` (a new line of enquiry), `examples` (go and find pictures — see below) |
 | `scope.mode` | `replace` that section, or `append` your answer after it as a further pass |
 | `scope.note` | the reviewer's own words, when they gave any |
 
@@ -207,6 +207,43 @@ plan: write `.quill/revision-response.json` with `{ "id": …, "status": "done" 
 Quill reads the file you edited — not the plan — and hands it back to the
 browser. One request is in flight at a time regardless of target, so you will
 never be asked to rewrite the plan and re-run research in the same moment.
+
+### `kind: "examples"` — bring back pictures
+
+This one does not edit the research document at all. Some of a design is learned
+by reading and some of it only by looking, so the reviewer has asked for
+screenshots of how comparable products did something. `scope.note` says what to
+look for.
+
+Write two things beside the plan:
+
+```
+research/examples/…            the images: png, jpg, webp, gif or avif
+research/examples.json         one entry each
+```
+
+```json
+{
+  "version": 1,
+  "examples": [
+    {
+      "id": "sts-main-menu",
+      "title": "Slay the Spire — main menu",
+      "source": "https://store.steampowered.com/app/646570/",
+      "note": "Three buttons, no submenu. Continue is the default.",
+      "image": "sts-main-menu.png",
+      "tags": ["main menu"],
+      "addedAt": "2026-08-05T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+**Keep the entries that are already in that file** — you are adding to a gallery,
+not replacing one. Every example carries its `source`; a screenshot with no
+source is a picture, not evidence, and Quill labels it as such. Then answer
+`done` as usual. Quill re-reads the manifest and serves the images to its own
+page; it never fetches anything itself.
 
 ## 5. Timeouts and cancellation
 

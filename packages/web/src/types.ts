@@ -162,6 +162,34 @@ export interface CompanionList {
   documents: CompanionSummary[];
 }
 
+/* ── Examples ─────────────────────────────────────────────────────────────
+   Screenshots of how comparable products did it, beside the document rather
+   than inside it: the markdown schema has no image node on purpose. */
+
+export interface Example {
+  id: string;
+  title: string;
+  /** Where it came from. A screenshot with no source is not evidence. */
+  source: string;
+  /** One line on what it shows. */
+  note: string;
+  /** File name inside `research/examples/`. */
+  image: string;
+  tags: string[];
+  addedAt: string;
+}
+
+export interface ExampleManifest {
+  version: 1;
+  examples: Example[];
+}
+
+/** GET/PUT /api/examples */
+export interface ExamplesResponse {
+  manifest: ExampleManifest;
+  revision: string;
+}
+
 /** GET /api/companions/:name */
 export interface CompanionDocument extends CompanionSummary {
   markdown: string;
@@ -214,7 +242,7 @@ export interface RevisionScope {
   document: string;
   heading: string;
   text: string;
-  kind: "redo" | "deepen" | "add";
+  kind: "redo" | "deepen" | "add" | "examples";
   mode: "replace" | "append";
   note?: string;
 }

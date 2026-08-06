@@ -8,6 +8,7 @@ import type {
   AnnotationsResponse,
   CompanionDocument,
   CompanionList,
+  ExamplesResponse,
   ConflictResponse,
   ErrorResponse,
   PlanResponse,
@@ -22,6 +23,14 @@ import { hashContent } from "./hash.js";
 import { writeFileAtomic } from "./atomic.js";
 import { resolveStaticPath } from "./static-path.js";
 import { listCompanions, readCompanion, writeCompanion } from "./companions.js";
+import {
+  mediaExists,
+  mediaTypeFor,
+  parseManifest,
+  readManifest,
+  resolveMediaPath,
+  writeManifest,
+} from "./examples.js";
 import { buildTicketPlan, countOpenComments, createTickets } from "./review.js";
 import {
   EMPTY_SIDECAR_REVISION,
@@ -57,6 +66,11 @@ interface AnnotationsConflictResponse extends ErrorResponse {
   current: AnnotationsResponse;
 }
 
+/** 409 for PUT /api/examples — carries what is actually on disk. */
+interface ExamplesConflictResponse extends ErrorResponse {
+  current: ExamplesResponse;
+}
+
 /** 409/500 for /api/revision — carries the state the browser should show. */
 interface RevisionErrorResponse extends ErrorResponse {
   current: RevisionState;
@@ -72,6 +86,8 @@ type JsonBody =
   | RevisionErrorResponse
   | CompanionList
   | CompanionDocument
+  | ExamplesResponse
+  | ExamplesConflictResponse
   | TicketPlan
   | ReviewSummary;
 
@@ -310,6 +326,88 @@ async function handleApiPlanPut(
     revision: newHash,
   };
   sendJson(res, 200, body);
+}
+
+/** PUT /api/examples — keep/cut decisions, guarded like every other write. */
+async function handleApiExamplesPut(
+  planPath: string,
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> {
+  let rawBody: string;
+  try {
+    rawBody = await readBody(req);
+  } catch {
+    sendJson(res, 400, { error: "Request body too large" });
+    return;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawBody);
+  } catch {
+    sendJson(res, 400, { error: "Invalid JSON body" });
+    return;
+  }
+
+  const raw = parsed as Record<string, unknown> | null;
+  if (!raw || typeof raw !== "object" || typeof raw.revision !== "string") {
+    sendJson(res, 400, { error: "body.revision must be a string" });
+    return;
+  }
+
+  const result = await writeManifest(planPath, parseManifest(raw.manifest), raw.revision);
+  if (result.ok) {
+    sendJson(res, 200, result.state);
+    return;
+  }
+  if (result.status === 409 && result.current) {
+    sendJson(res, 409, { error: result.error, current: result.current });
+    return;
+  }
+  sendJson(res, result.status, { error: result.error } satisfies ErrorResponse);
+}
+
+/**
+ * GET /api/examples/media/:file — the screenshots themselves.
+ *
+ * The name comes from a manifest an agent wrote rather than from a fixed set,
+ * so containment is proved rather than assumed, and only image types are
+ * served: this endpoint must never become a way to read a file that happens to
+ * sit in that directory.
+ */
+async function handleApiExamplesMedia(
+  planPath: string,
+  pathname: string,
+  res: ServerResponse,
+): Promise<void> {
+  let requested: string;
+  try {
+    requested = decodeURIComponent(pathname.slice("/api/examples/media/".length));
+  } catch {
+    sendJson(res, 404, { error: "Not found" } satisfies ErrorResponse);
+    return;
+  }
+
+  const type = mediaTypeFor(requested);
+  const path = resolveMediaPath(planPath, requested);
+  if (type === null || path === null || !(await mediaExists(path))) {
+    sendJson(res, 404, { error: "Not found" } satisfies ErrorResponse);
+    return;
+  }
+
+  try {
+    const bytes = await readFile(path);
+    res.writeHead(200, {
+      "Content-Type": type,
+      "Content-Length": String(bytes.length),
+      // The agent may replace a shot in place; a cached one would show the old.
+      "Cache-Control": "no-store",
+    });
+    res.end(bytes);
+  } catch {
+    sendJson(res, 500, { error: "Failed to read the image" } satisfies ErrorResponse);
+  }
 }
 
 /** PUT /api/companions/:name — the same guarded write the plan gets. */
@@ -808,6 +906,29 @@ function createHandler(
         res.writeHead(405, { "Content-Type": "text/plain", Allow: "GET, PUT" });
         res.end("Method Not Allowed");
       }
+      return;
+    }
+
+    if (pathname === "/api/examples") {
+      if (method === "GET") {
+        const state = await readManifest(planPath);
+        sendJson(res, 200, state);
+      } else if (method === "PUT") {
+        await handleApiExamplesPut(planPath, req, res);
+      } else {
+        res.writeHead(405, { "Content-Type": "text/plain", Allow: "GET, PUT" });
+        res.end("Method Not Allowed");
+      }
+      return;
+    }
+
+    if (pathname.startsWith("/api/examples/media/")) {
+      if (method !== "GET") {
+        res.writeHead(405, { "Content-Type": "text/plain", Allow: "GET" });
+        res.end("Method Not Allowed");
+        return;
+      }
+      await handleApiExamplesMedia(planPath, pathname, res);
       return;
     }
 

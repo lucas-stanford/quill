@@ -141,6 +141,12 @@ pass, then go out over the same agent bridge as **Update with AI** (see `AGENT-B
 §4a). One request is in flight at a time regardless of which document it is about. When the
 answer lands, **Undo the re-run** puts the document back exactly as it was.
 
+There is also **Find examples**. Some of a design is learned by reading and some of it only
+by looking, so you can ask for screenshots of how comparable products did something — and
+they come back as a gallery beside the document, each with its source and a line on what it
+shows. **Cite** one and a markdown link lands in the section you are reading; the picture
+stays out of the plan, because the schema has no image node on purpose.
+
 You can also just type in it: companions autosave, and a write is refused if the agent
 changed the file underneath you rather than clobbering whichever side raced slower.
 
@@ -172,6 +178,7 @@ The handoff is optional. A missing `fer` is reported, never fatal.
 | `PLAN.md` | your plan — clean, diffable markdown, the source of truth |
 | `PLAN.quill.json` | comments and threads (anchored by quoted text), plus your feedback notes |
 | `research.md`, `reference.md` | optional companions — read-only tabs beside the plan |
+| `research/examples.json` | the examples gallery — screenshots and their sources |
 | `.quill/` | transient revision request/response, attached mode only |
 
 Comments are anchored by the text they quote plus surrounding context, never by offsets, so
@@ -184,7 +191,7 @@ sentence.
 ```bash
 pnpm install
 pnpm build          # web bundle, then the CLI that embeds it
-pnpm test           # 508 tests
+pnpm test           # 521 tests
 pnpm typecheck
 ```
 

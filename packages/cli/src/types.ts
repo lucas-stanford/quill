@@ -41,6 +41,36 @@ export interface CompanionDocument extends CompanionSummary {
   revision: string;
 }
 
+/* ── Examples ─────────────────────────────────────────────────────────────
+   Screenshots of how comparable products did it. Beside the document rather
+   than inside it: the markdown schema has no image node on purpose. */
+
+export interface Example {
+  id: string;
+  title: string;
+  /** Where it came from. A screenshot with no source is not evidence. */
+  source: string;
+  /** Why it is here — the agent's one line about what it shows. */
+  note: string;
+  /** File name inside `research/examples/`. */
+  image: string;
+  tags: string[];
+  /** ISO 8601. */
+  addedAt: string;
+}
+
+/** GET/PUT /api/examples */
+export interface ExampleManifest {
+  version: 1;
+  examples: Example[];
+}
+
+export interface ExamplesResponse {
+  manifest: ExampleManifest;
+  /** sha256 of the serialized manifest, for conflict-safe writes. */
+  revision: string;
+}
+
 /** PUT /api/companions/:name */
 export interface SaveCompanionRequest {
   markdown: string;
@@ -209,8 +239,11 @@ export interface RevisionScope {
   heading: string;
   /** The section as it stands right now. */
   text: string;
-  /** Re-run it from scratch, push it further, or open a new line of enquiry. */
-  kind: "redo" | "deepen" | "add";
+  /**
+   * Re-run it from scratch, push it further, open a new line of enquiry, or go
+   * and find examples of how other people did it.
+   */
+  kind: "redo" | "deepen" | "add" | "examples";
   /** Whether the answer replaces the section or is added as a further pass. */
   mode: "replace" | "append";
   /** The reviewer's own words, for `deepen` and `add`. */

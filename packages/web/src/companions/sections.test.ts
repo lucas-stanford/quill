@@ -106,6 +106,25 @@ describe("replaceSection", () => {
     ]);
   });
 
+  it("keeps one blank line before the next heading", () => {
+    // Without it the following heading is welded onto the last line of what was
+    // just written — it reads as one paragraph and parses as a different
+    // document, which is how a re-run of one section quietly loses the next.
+    const sections = splitSections(RESEARCH);
+    const next = replaceSection(RESEARCH, sections[0]!, "## Question\n\nRewritten.");
+
+    expect(next).toContain("Rewritten.\n\n## Prior art");
+    expect(next).not.toMatch(/Rewritten\.\n## /);
+    expect(splitSections(next)).toHaveLength(3);
+  });
+
+  it("does not stack blank lines when the replacement already ends in one", () => {
+    const sections = splitSections(RESEARCH);
+    const next = replaceSection(RESEARCH, sections[0]!, "## Question\n\nRewritten.\n\n\n");
+
+    expect(next).not.toMatch(/\n\n\n/);
+  });
+
   it("replaces the last section without eating the trailing newline", () => {
     const sections = splitSections(RESEARCH);
     const next = replaceSection(RESEARCH, sections[2]!, "## Implications for the plan\n\n1. One.\n");

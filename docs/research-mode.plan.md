@@ -80,7 +80,7 @@ rather than reading about.
 5. Send Cut sections to a collapsed tray at the foot of the document, restorable,
    and never write a cut section back to the file.
 
-## M3 — Examples you can see: ask for comparable screens and get a gallery of them
+## M3 — DONE. Examples you can see: ask for comparable screens and get a gallery of them
 
 1. Define the examples manifest — `research/examples.json`, one entry per
    example: title, source URL, note, image path, tags, and when it was added.

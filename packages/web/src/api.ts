@@ -4,6 +4,7 @@ import type {
   CompanionList,
   ConflictResponse,
   PlanResponse,
+  ExamplesResponse,
   RevisionBrief,
   RevisionScope,
   RevisionState,
@@ -206,4 +207,38 @@ export async function saveCompanion(
     throw new Error(await errorMessage(res, `Failed to save ${name} (${res.status})`));
   }
   return (await res.json()) as CompanionDocument;
+}
+
+/* ── Examples ────────────────────────────────────────────────────────────
+   The gallery reads the manifest and writes back keep/cut decisions. The
+   images themselves are served from `research/examples/` by name. */
+
+export async function fetchExamples(): Promise<ExamplesResponse> {
+  const res = await fetch("/api/examples");
+  if (!res.ok) throw new Error(await errorMessage(res, `Failed to load examples (${res.status})`));
+  return (await res.json()) as ExamplesResponse;
+}
+
+export async function saveExamples(
+  manifest: ExamplesResponse["manifest"],
+  revision: string,
+): Promise<ExamplesResponse> {
+  const res = await fetch("/api/examples", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ manifest, revision }),
+  });
+  if (res.status === 409) {
+    // The agent added examples while a cut was in flight. Its copy is newer,
+    // so the caller reloads rather than clobbering what just arrived.
+    const body = (await res.json()) as { current: ExamplesResponse };
+    return body.current;
+  }
+  if (!res.ok) throw new Error(await errorMessage(res, `Failed to save examples (${res.status})`));
+  return (await res.json()) as ExamplesResponse;
+}
+
+/** Where an example's picture is served from. */
+export function exampleImageUrl(image: string): string {
+  return `/api/examples/media/${encodeURIComponent(image)}`;
 }

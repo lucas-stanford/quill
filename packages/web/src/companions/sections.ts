@@ -123,6 +123,16 @@ export function replaceSection(
   const lines = markdown.split("\n");
   const tail = lines.slice(section.endLine);
   const body = replacement.replace(/\s+$/, "").split("\n");
+
+  /*
+   * Put back the blank line the section ended with. Trailing whitespace is
+   * trimmed off the replacement so an agent's stray newlines do not accumulate,
+   * but a section is separated from the next heading by exactly one blank line
+   * — and without it the heading is welded onto the last line of what was just
+   * written, which reads as one paragraph and parses as a different document.
+   */
+  if (tail.length > 0 && tail[0]!.trim() !== "") body.push("");
+
   return [...lines.slice(0, section.headingLine), ...body, ...tail].join("\n");
 }
 
