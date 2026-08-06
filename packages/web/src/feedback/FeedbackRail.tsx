@@ -1,9 +1,3 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import type { KeyboardEvent } from "react";
-import type { AnnotationsApi } from "../annotations";
-import type { FeedbackEntry } from "../types";
-import "./feedback.css";
-
 /**
  * feedback/FeedbackRail.tsx
  *
@@ -29,6 +23,12 @@ import "./feedback.css";
  * that column moves every anchor. Nothing over here is measured against
  * anything.
  */
+
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import type { KeyboardEvent } from "react";
+import type { AnnotationsApi } from "../annotations";
+import type { FeedbackEntry } from "../types";
+import "./feedback.css";
 /**
  * The width at which BOTH rails fit beside a full-width page:
  * 300 + 24 + 816 + 24 + 300 + 2x24 gutter. Below it the page would have to

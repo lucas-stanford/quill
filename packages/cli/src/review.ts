@@ -1,12 +1,11 @@
-import { spawn } from "node:child_process";
-import { readFile } from "node:fs/promises";
-import type { Sidecar, TicketPlan, TicketPreview } from "./types.js";
-
 /**
  * A plan's job is to become work. Headings become parents, the steps beneath
  * them become children, and stated ordering becomes dependency edges.
  */
 
+import { spawn } from "node:child_process";
+import { readFile } from "node:fs/promises";
+import type { Sidecar, TicketPlan, TicketPreview } from "./types.js";
 export const FER_COMMAND = "fer";
 
 /** Exit codes. A parent branches on these without parsing prose. */

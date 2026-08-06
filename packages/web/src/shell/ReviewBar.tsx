@@ -1,13 +1,3 @@
-import { useCallback, useRef, useState } from "react";
-import type { TrackedChangesApi } from "../tracking";
-import { bulkAnnouncement, summarizeChanges } from "./reviewSummary";
-import "./ReviewBar.css";
-
-export interface ReviewBarProps {
-  /** Absent until the plan is ready. */
-  tracking?: TrackedChangesApi;
-}
-
 /**
  * shell/ReviewBar.tsx
  *
@@ -29,6 +19,17 @@ export interface ReviewBarProps {
  * has edits of their own it is scoped to the AI's changes so their work is not
  * collateral damage (see reviewSummary.ts). Every bulk action is announced.
  */
+
+import { useCallback, useRef, useState } from "react";
+import type { TrackedChangesApi } from "../tracking";
+import { bulkAnnouncement, summarizeChanges } from "./reviewSummary";
+import "./ReviewBar.css";
+
+export interface ReviewBarProps {
+  /** Absent until the plan is ready. */
+  tracking?: TrackedChangesApi;
+}
+
 export function ReviewBar({ tracking }: ReviewBarProps) {
   const [message, setMessage] = useState("");
   const summary = summarizeChanges(tracking?.changes ?? []);

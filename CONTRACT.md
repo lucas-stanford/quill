@@ -76,6 +76,10 @@ Frozen signatures are in `approve/useApprove.ts` and `approve/ApproveButton.tsx`
    the document. There is no longer a mode gating it — the caret is the only signal — so
    showing it more eagerly is a regression.
 6. **Nothing may move the page.** The ribbon and review bar animate `transform` only.
+7. **A file's own doc comment goes at the top, above the imports.** It is what the
+   file is for, and a reader looking for that should not have to scroll past a
+   dependency list to find it. Comments about a specific declaration stay with
+   the declaration.
 
 ## Build and test
 

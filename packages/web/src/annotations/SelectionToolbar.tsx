@@ -1,12 +1,3 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import type { RefObject } from "react";
-import type { AnnotationsInternal } from "./internal";
-import { chromeBottom, isVisible } from "./selectionGeometry";
-import { placeSelectionToolbar, samePlacement } from "./selectionPlacement";
-import type { Placement } from "./selectionPlacement";
-import "./selectionToolbar.css";
-
 /**
  * annotations/SelectionToolbar.tsx
  *
@@ -36,6 +27,14 @@ import "./selectionToolbar.css";
  * composer and one comment-creation path.
  */
 
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import type { RefObject } from "react";
+import type { AnnotationsInternal } from "./internal";
+import { chromeBottom, isVisible } from "./selectionGeometry";
+import { placeSelectionToolbar, samePlacement } from "./selectionPlacement";
+import type { Placement } from "./selectionPlacement";
+import "./selectionToolbar.css";
 export interface SelectionToolbarProps {
   internal: AnnotationsInternal | null;
   /**

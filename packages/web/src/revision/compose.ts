@@ -1,8 +1,3 @@
-import type { AnnotationsApi } from "../annotations";
-import type { TrackedChangesApi } from "../tracking";
-import type { RevisionBrief } from "../types";
-import { buildBrief, formatBriefPrompt, isBriefEmpty } from "./buildBrief";
-
 /**
  * revision/compose.ts
  *
@@ -15,6 +10,11 @@ import { buildBrief, formatBriefPrompt, isBriefEmpty } from "./buildBrief";
  * at all, is not an instruction: the field is dropped so the agent is never
  * handed an empty string to interpret.
  */
+
+import type { AnnotationsApi } from "../annotations";
+import type { TrackedChangesApi } from "../tracking";
+import type { RevisionBrief } from "../types";
+import { buildBrief, formatBriefPrompt, isBriefEmpty } from "./buildBrief";
 export function composeBrief(
   markdown: string,
   annotations: AnnotationsApi,

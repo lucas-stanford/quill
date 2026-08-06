@@ -1,9 +1,3 @@
-import { useCallback, useRef, useState } from "react";
-import { fetchRevision, requestSectionRevision } from "../api";
-import type { RevisionScope, RevisionStatus } from "../types";
-import { appendSection, replaceSection, splitSections } from "./sections";
-import type { Section } from "./sections";
-
 /**
  * companions/useSectionRevision.ts
  *
@@ -23,6 +17,11 @@ import type { Section } from "./sections";
  * tracked changes make, at the granularity this document works in.
  */
 
+import { useCallback, useRef, useState } from "react";
+import { fetchRevision, requestSectionRevision } from "../api";
+import type { RevisionScope, RevisionStatus } from "../types";
+import { appendSection, replaceSection, splitSections } from "./sections";
+import type { Section } from "./sections";
 const POLL_MS = 400;
 const MAX_WAIT_MS = 15 * 60 * 1000;
 

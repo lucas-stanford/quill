@@ -1,29 +1,3 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { AnnotationsApi } from "../annotations";
-import type { TrackedChangesApi } from "../tracking";
-import type { RevisionState, RevisionStatus } from "../types";
-import { cancelRevision, fetchRevision, requestRevision } from "../api";
-import { composeBrief, renderPrompt, withInstruction } from "./compose";
-import { briefCommentIds, briefFeedbackIds } from "./buildBrief";
-import { decideApply } from "./applyPlan";
-import { runRevision, timerDelay } from "./runner";
-import { NOTHING_TO_SEND, transportFailure } from "./status";
-
-export interface UseRevisionOptions {
-  enabled: boolean;
-  markdown: string;
-  annotations: AnnotationsApi;
-  tracking: TrackedChangesApi;
-}
-
-export interface RevisionApi {
-  status: RevisionStatus;
-  error: string | null;
-  /** Asks the agent for a revision, then applies it as tracked changes. */
-  start: (instruction?: string) => void;
-  cancel: () => void;
-}
-
 /**
  * revision/useRevision.ts
  *
@@ -68,6 +42,33 @@ export interface RevisionApi {
  * changes — and the popover's instruction is attached to that memo rather than
  * costing another scan.
  */
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { AnnotationsApi } from "../annotations";
+import type { TrackedChangesApi } from "../tracking";
+import type { RevisionState, RevisionStatus } from "../types";
+import { cancelRevision, fetchRevision, requestRevision } from "../api";
+import { composeBrief, renderPrompt, withInstruction } from "./compose";
+import { briefCommentIds, briefFeedbackIds } from "./buildBrief";
+import { decideApply } from "./applyPlan";
+import { runRevision, timerDelay } from "./runner";
+import { NOTHING_TO_SEND, transportFailure } from "./status";
+
+export interface UseRevisionOptions {
+  enabled: boolean;
+  markdown: string;
+  annotations: AnnotationsApi;
+  tracking: TrackedChangesApi;
+}
+
+export interface RevisionApi {
+  status: RevisionStatus;
+  error: string | null;
+  /** Asks the agent for a revision, then applies it as tracked changes. */
+  start: (instruction?: string) => void;
+  cancel: () => void;
+}
+
 export function useRevision({
   enabled,
   markdown,

@@ -1,23 +1,3 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Editor } from "@tiptap/react";
-import type { EditorView } from "@tiptap/pm/view";
-import type { Comment, CommentReply, FeedbackEntry, Sidecar, TextAnchor } from "../types";
-import { fetchAnnotations, saveAnnotations } from "../api";
-import { buildDocText, trimRange } from "./docText";
-import { measureSelectionGeometry } from "./selectionGeometry";
-import type { SelectionGeometry } from "./selectionGeometry";
-import { createAnchor, prepareDocument, resolveAnchorIn } from "./anchor";
-import {
-  anchorPluginKey,
-  createAnchorPlugin,
-  currentAnchorRanges,
-  setAnchorRanges,
-} from "./anchorPlugin";
-import type { AnchorPluginHandlers, AnchorRange } from "./anchorPlugin";
-import { attachInternal, DRAFT_ID } from "./internal";
-import type { AnnotationsInternal, DraftAnchor, SidecarSync } from "./internal";
-import { orderComments, mergeRemoteComments, selectForBrief, selectOrphans } from "./select";
-
 /**
  * annotations/useAnnotations.ts
  *
@@ -39,6 +19,25 @@ import { orderComments, mergeRemoteComments, selectForBrief, selectOrphans } fro
  *      round-trip stays byte-identical (invariant 2).
  */
 
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { Editor } from "@tiptap/react";
+import type { EditorView } from "@tiptap/pm/view";
+import type { Comment, CommentReply, FeedbackEntry, Sidecar, TextAnchor } from "../types";
+import { fetchAnnotations, saveAnnotations } from "../api";
+import { buildDocText, trimRange } from "./docText";
+import { measureSelectionGeometry } from "./selectionGeometry";
+import type { SelectionGeometry } from "./selectionGeometry";
+import { createAnchor, prepareDocument, resolveAnchorIn } from "./anchor";
+import {
+  anchorPluginKey,
+  createAnchorPlugin,
+  currentAnchorRanges,
+  setAnchorRanges,
+} from "./anchorPlugin";
+import type { AnchorPluginHandlers, AnchorRange } from "./anchorPlugin";
+import { attachInternal, DRAFT_ID } from "./internal";
+import type { AnnotationsInternal, DraftAnchor, SidecarSync } from "./internal";
+import { orderComments, mergeRemoteComments, selectForBrief, selectOrphans } from "./select";
 export interface UseAnnotationsOptions {
   editor: Editor | null;
   /** Only load once the plan is ready. */

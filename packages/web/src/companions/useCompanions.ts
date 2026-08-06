@@ -1,7 +1,3 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchCompanion, fetchCompanions } from "../api";
-import type { CompanionDocument, CompanionSummary } from "../types";
-
 /**
  * companions/useCompanions.ts
  *
@@ -22,6 +18,9 @@ import type { CompanionDocument, CompanionSummary } from "../types";
  * the plan against evidence that has since changed.
  */
 
+import { useCallback, useEffect, useRef, useState } from "react";
+import { fetchCompanion, fetchCompanions } from "../api";
+import type { CompanionDocument, CompanionSummary } from "../types";
 export interface CompanionsApi {
   /** The companions that exist, for the title-bar control. Empty is normal. */
   available: CompanionSummary[];

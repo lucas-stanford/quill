@@ -1,13 +1,3 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { Comment } from "../types";
-import type { AnnotationsApi } from "./useAnnotations";
-import { readInternal, DRAFT_ID } from "./internal";
-import type { AnnotationsInternal } from "./internal";
-import { layoutBubbles, layoutHeight } from "./layout";
-import type { BubbleBox } from "./layout";
-import { SelectionToolbar } from "./SelectionToolbar";
-import "./annotations.css";
-
 /**
  * annotations/CommentRail.tsx
  *
@@ -29,6 +19,15 @@ import "./annotations.css";
  * one comment-creation path — beginDraft() → the draft bubble → addComment().
  */
 
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { Comment } from "../types";
+import type { AnnotationsApi } from "./useAnnotations";
+import { readInternal, DRAFT_ID } from "./internal";
+import type { AnnotationsInternal } from "./internal";
+import { layoutBubbles, layoutHeight } from "./layout";
+import type { BubbleBox } from "./layout";
+import { SelectionToolbar } from "./SelectionToolbar";
+import "./annotations.css";
 export interface CommentRailProps {
   annotations: AnnotationsApi;
 }

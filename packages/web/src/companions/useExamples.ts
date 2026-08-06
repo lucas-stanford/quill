@@ -1,7 +1,3 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { exampleImageUrl, fetchExamples, saveExamples } from "../api";
-import type { Example } from "../types";
-
 /**
  * companions/useExamples.ts
  *
@@ -13,6 +9,9 @@ import type { Example } from "../types";
  * and cut decisions, and knows the URL of each picture.
  */
 
+import { useCallback, useEffect, useRef, useState } from "react";
+import { exampleImageUrl, fetchExamples, saveExamples } from "../api";
+import type { Example } from "../types";
 export interface ExamplesApi {
   examples: Example[];
   loading: boolean;

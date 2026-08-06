@@ -1,3 +1,24 @@
+/**
+ * revision/UpdateWithAI.tsx
+ *
+ * The button that closes the loop, and everything the user needs to know while
+ * it is working.
+ *
+ * Shape: a split button. The main half sends what is already pending in one
+ * click — the common case, and the count is on the button so nobody sends an
+ * empty brief by accident. With nothing pending it is disabled, because a
+ * request that cannot change anything hands the model a document it was not
+ * asked to touch. The caret half stays live and opens a small instruction
+ * popover: a note of your own is a thing worth sending on its own, and it is
+ * the way out of the disabled state.
+ *
+ * In flight, the button is replaced in place by a status pill with a cancel
+ * button. Nothing covers the document: the agent works, the user keeps reading.
+ * Everything transient (the popover, the outcome notice) is absolutely
+ * positioned out of the title bar's flow, so no state of this control can move
+ * the chrome or the page.
+ */
+
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { RevisionApi } from "./useRevision";
@@ -21,26 +42,6 @@ export interface UpdateWithAIProps {
 const DONE_NOTICE_MS = 6000;
 const QUIET_NOTICE_MS = 3000;
 
-/**
- * revision/UpdateWithAI.tsx
- *
- * The button that closes the loop, and everything the user needs to know while
- * it is working.
- *
- * Shape: a split button. The main half sends what is already pending in one
- * click — the common case, and the count is on the button so nobody sends an
- * empty brief by accident. With nothing pending it is disabled, because a
- * request that cannot change anything hands the model a document it was not
- * asked to touch. The caret half stays live and opens a small instruction
- * popover: a note of your own is a thing worth sending on its own, and it is
- * the way out of the disabled state.
- *
- * In flight, the button is replaced in place by a status pill with a cancel
- * button. Nothing covers the document: the agent works, the user keeps reading.
- * Everything transient (the popover, the outcome notice) is absolutely
- * positioned out of the title bar's flow, so no state of this control can move
- * the chrome or the page.
- */
 export function UpdateWithAI({ revision, pendingCount }: UpdateWithAIProps) {
   const { status, error, start, cancel } = revision;
   const presentation = presentRevision(status, error);

@@ -1,15 +1,3 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { EditorContent } from "@tiptap/react";
-import { usePlanEditor } from "../editor";
-import type { CompanionsApi } from "./useCompanions";
-import { useCompanionDoc } from "./useCompanionDoc";
-import { useSectionRevision } from "./useSectionRevision";
-import { useExamples } from "./useExamples";
-import { removeSection, replaceSection } from "./sections";
-import type { Section } from "./sections";
-import type { Example } from "../types";
-import "./companions.css";
-
 /**
  * companions/CompanionDrawer.tsx
  *
@@ -26,6 +14,18 @@ import "./companions.css";
  * one, push one further, or cut one, and the sections you were happy with are
  * left alone.
  */
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import { EditorContent } from "@tiptap/react";
+import { usePlanEditor } from "../editor";
+import type { CompanionsApi } from "./useCompanions";
+import { useCompanionDoc } from "./useCompanionDoc";
+import { useSectionRevision } from "./useSectionRevision";
+import { useExamples } from "./useExamples";
+import { removeSection, replaceSection } from "./sections";
+import type { Section } from "./sections";
+import type { Example } from "../types";
+import "./companions.css";
 export function CompanionDrawer({ companions }: { companions: CompanionsApi }) {
   const { open, close } = companions;
   const name = open?.name ?? null;

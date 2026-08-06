@@ -1,9 +1,3 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { fetchCompanion, saveCompanion, CompanionConflictError } from "../api";
-import type { CompanionDocument, SaveState } from "../types";
-import { splitSections } from "./sections";
-import type { Section } from "./sections";
-
 /**
  * companions/useCompanionDoc.ts
  *
@@ -22,6 +16,11 @@ import type { Section } from "./sections";
  * so a conflict adopts the file rather than fighting it.
  */
 
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { fetchCompanion, saveCompanion, CompanionConflictError } from "../api";
+import type { CompanionDocument, SaveState } from "../types";
+import { splitSections } from "./sections";
+import type { Section } from "./sections";
 const AUTOSAVE_DELAY_MS = 700;
 
 export interface CompanionDocApi {
