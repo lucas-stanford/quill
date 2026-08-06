@@ -181,6 +181,22 @@ function readFeedback(value: unknown, where: string): FeedbackEntry[] {
 }
 
 /**
+ * Reads the reconciliation marks: companion name to digest.
+ *
+ * Dropped entirely when empty, like every other optional field here, so a
+ * sidecar written before this existed round-trips byte-identically.
+ */
+function readReconciled(value: unknown, where: string): Record<string, string> {
+  if (value === undefined || value === null) return {};
+  const raw = requireRecord(value, where);
+  const out: Record<string, string> = {};
+  for (const [name, digest] of Object.entries(raw)) {
+    out[name] = requireString(digest, `${where}.${name}`);
+  }
+  return out;
+}
+
+/**
  * Validates a decoded sidecar and normalizes it to exactly the documented
  * shape — unknown keys are dropped, so what lands on disk always matches the
  * schema the `version` field advertises.
@@ -217,6 +233,9 @@ export function validateSidecar(value: unknown, where = "sidecar"): SidecarParse
      */
     const feedback = readFeedback(raw.feedback, `${where}.feedback`);
     if (feedback.length > 0) sidecar.feedback = feedback;
+
+    const reconciled = readReconciled(raw.reconciled, `${where}.reconciled`);
+    if (Object.keys(reconciled).length > 0) sidecar.reconciled = reconciled;
 
     return { ok: true, sidecar };
   } catch (err) {

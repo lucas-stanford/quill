@@ -564,3 +564,61 @@
     display: none;
   }
 }
+
+/* ── Reconcile banner ────────────────────────────────────────────────────
+   The plan may no longer follow from the research.
+
+   Pinned over the canvas, never a row in it: the page's geometry is
+   load-bearing — comment bubbles are placed against live text coordinates —
+   so a strip that pushed the document down would move every anchor to say
+   something nobody asked to be told. Above the review bar, which sits at the
+   very bottom. */
+
+.reconcile-banner {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--review-bar-offset, 16px) + 52px);
+  transform: translateX(-50%);
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(680px, calc(100% - 48px));
+  padding: 8px 12px;
+  font-family: var(--font-chrome, system-ui, sans-serif);
+  font-size: 12px;
+  color: var(--color-text, #e6e6e6);
+  background: var(--color-titlebar-bg, #1c1c1f);
+  border: 1px solid var(--color-accent, #4fa3e0);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
+}
+
+.reconcile-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  line-height: 1.45;
+}
+
+.reconcile-text strong {
+  font-weight: 600;
+}
+
+.reconcile-action {
+  flex: 0 0 auto;
+  padding: 3px 9px;
+  font: inherit;
+  font-size: 11px;
+  color: var(--color-text-muted, #8a8a8e);
+  background: transparent;
+  border: 1px solid var(--color-titlebar-border, #2d2d30);
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.reconcile-action:hover,
+.reconcile-action:focus-visible {
+  color: var(--color-text, #e6e6e6);
+  border-color: var(--color-text-muted, #8a8a8e);
+  outline: none;
+}

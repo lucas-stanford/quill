@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  digest,
+  implicationsOf,
   appendSection,
   removeSection,
   replaceSection,
@@ -179,5 +181,57 @@ describe("appendSection", () => {
       "Scope calibration",
     ]);
     expect(next).not.toMatch(/\n\n\n/);
+  });
+});
+
+describe("implicationsOf", () => {
+  it("is the implications section, not the whole document", () => {
+    const implications = implicationsOf(RESEARCH);
+
+    expect(implications).toContain("Sessions must resolve in under 30 minutes.");
+    expect(implications).not.toContain("Weird West");
+  });
+
+  it("falls back to the whole document when nothing states any", () => {
+    // No stated implications means any change might matter, so watch it all.
+    const bare = "# Research\n\n## Prior art\n\nSome findings.\n";
+
+    expect(implicationsOf(bare)).toContain("Prior art");
+  });
+
+  it("matches the heading loosely — 'Implications' or 'Implications for the plan'", () => {
+    const short = "# R\n\n## Findings\n\nx\n\n## Implications\n\n1. Ship on Tuesday.\n";
+
+    expect(implicationsOf(short)).toBe("1. Ship on Tuesday.");
+  });
+});
+
+describe("digest", () => {
+  it("is stable for the same text and different for changed text", () => {
+    expect(digest("one")).toBe(digest("one"));
+    expect(digest("one")).not.toBe(digest("two"));
+  });
+
+  it("ignores nothing that matters — a single character changes it", () => {
+    expect(digest("Sessions under 30 minutes")).not.toBe(digest("Sessions under 20 minutes"));
+  });
+
+  it("is short enough to read in a sidecar a human opens", () => {
+    expect(digest("anything")).toHaveLength(8);
+  });
+});
+
+describe("research changing is what raises the banner", () => {
+  it("a citation fix does not move the implications; a conclusion does", () => {
+    // The point of watching the implications rather than the file: being told
+    // the plan is stale because a URL was corrected is how a notice gets
+    // trained away.
+    const fixedCitation = RESEARCH.replace("https://example.com/one", "https://example.com/1");
+    expect(digest(implicationsOf(fixedCitation))).toBe(digest(implicationsOf(RESEARCH)));
+
+    const changedConclusion = RESEARCH.replace("under 30 minutes", "under 10 minutes");
+    expect(digest(implicationsOf(changedConclusion))).not.toBe(
+      digest(implicationsOf(RESEARCH)),
+    );
   });
 });

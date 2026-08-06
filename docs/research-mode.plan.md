@@ -94,7 +94,7 @@ rather than reading about.
 5. Document the whole request and response shape in `AGENT-BRIDGE.md`, because
    the bridge is a contract with agents that are not this one.
 
-## M4 — The loop closes: change the research and Quill asks about the plan
+## M4 — DONE (bar the comment count). The loop closes: change the research and Quill asks about the plan
 
 1. Track the revision of `research.md` the plan was last reconciled against.
 2. Diff the implications section when research settles, and raise a quiet banner

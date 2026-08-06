@@ -313,6 +313,50 @@ describe("validateSidecar — general feedback", () => {
   });
 });
 
+describe("validateSidecar — reconciliation marks", () => {
+  it("keeps what the plan was last checked against", () => {
+    // This validator rebuilds its object, so a field it does not know about is
+    // dropped silently — which for this one would mean the banner firing on
+    // every reload, or never.
+    const result = validateSidecar({
+      version: 1,
+      comments: [],
+      reconciled: { "research.md": "8e2caf13" },
+    });
+
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.sidecar.reconciled, { "research.md": "8e2caf13" });
+  });
+
+  it("survives the round trip through the canonical serialization", () => {
+    const written = serializeSidecar(
+      validateSidecar({ version: 1, comments: [], reconciled: { "research.md": "abc12345" } })
+        .sidecar,
+    );
+
+    assert.deepEqual(parseSidecar(written).sidecar.reconciled, { "research.md": "abc12345" });
+  });
+
+  it("drops the key when there is nothing recorded", () => {
+    for (const reconciled of [{}, undefined, null]) {
+      const result = validateSidecar({ version: 1, comments: [], reconciled });
+      assert.equal(result.ok, true);
+      assert.equal("reconciled" in result.sidecar, false);
+    }
+  });
+
+  it("rejects a mark that is not a string, naming the field", () => {
+    const result = validateSidecar({
+      version: 1,
+      comments: [],
+      reconciled: { "research.md": 7 },
+    });
+
+    assert.equal(result.ok, false);
+    assert.match(result.reason, /reconciled\.research\.md must be a string/);
+  });
+});
+
 describe("parseSidecar", () => {
   it("reports invalid JSON as a syntax problem", () => {
     const result = parseSidecar("{ this is not json");

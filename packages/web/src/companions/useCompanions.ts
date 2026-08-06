@@ -29,6 +29,8 @@ export interface CompanionsApi {
   /** Name of the companion being fetched, for the pending state. */
   loading: string | null;
   error: string | null;
+  /** Bumped each time the drawer closes — a cheap "something may have changed". */
+  closedCount: number;
   show: (name: string) => void;
   close: () => void;
 }
@@ -38,6 +40,7 @@ export function useCompanions(enabled: boolean): CompanionsApi {
   const [open, setOpen] = useState<CompanionDocument | null>(null);
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [closedCount, setClosedCount] = useState(0);
 
   /** Guards against an older fetch resolving after a newer one. */
   const requestRef = useRef(0);
@@ -90,7 +93,8 @@ export function useCompanions(enabled: boolean): CompanionsApi {
     setOpen(null);
     setLoading(null);
     setError(null);
+    setClosedCount((n) => n + 1);
   }, []);
 
-  return { available, open, loading, error, show, close };
+  return { available, open, loading, error, closedCount, show, close };
 }

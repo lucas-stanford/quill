@@ -6,7 +6,13 @@ import { useAnnotations, CommentRail } from "./annotations";
 import { useTrackedChanges } from "./tracking";
 import { useRevision, UpdateWithAI } from "./revision";
 import { useApprove, ApproveButton } from "./approve";
-import { useCompanions, CompanionDrawer, CompanionTabs } from "./companions";
+import {
+  useCompanions,
+  useReconcile,
+  CompanionDrawer,
+  CompanionTabs,
+  ReconcileBanner,
+} from "./companions";
 import { FeedbackRail } from "./feedback";
 import { ConflictError, fetchPlan, savePlan } from "./api";
 import type { LoadStatus, PlanResponse, SaveState } from "./types";
@@ -121,6 +127,18 @@ export default function App() {
 
   const companions = useCompanions(status === "ready");
 
+  /*
+   * Re-checked when the drawer closes, which is when an agent's answer has
+   * landed and the reviewer has finished with it — cheap, and exactly when the
+   * research is most likely to have moved.
+   */
+  const reconcile = useReconcile({
+    enabled: status === "ready",
+    companions: companions.available,
+    annotations,
+    tick: companions.open === null ? companions.closedCount : -1,
+  });
+
   useLivePlan({
     enabled: status === "ready",
     onChanged: ({ revision }) => {
@@ -176,6 +194,20 @@ export default function App() {
         status === "ready" ? <CompanionTabs companions={companions} /> : null
       }
       companionDrawer={<CompanionDrawer companions={companions} />}
+      banner={
+        <ReconcileBanner
+          stale={reconcile.stale}
+          onAccept={reconcile.accept}
+          onRecheck={() => {
+            // The ordinary round trip, with the reason attached — not a second
+            // revision path that behaves almost the same.
+            annotations.addFeedback(
+              `The research changed: re-check this plan against the implications in ${reconcile.stale}, and say which milestones are affected.`,
+            );
+            reconcile.accept();
+          }}
+        />
+      }
       updateWithAI={
         status === "ready" ? (
           <UpdateWithAI

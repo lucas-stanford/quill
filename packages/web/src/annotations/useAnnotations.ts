@@ -78,6 +78,10 @@ export interface AnnotationsApi {
   resolveFeedbackMany: (ids: readonly string[], resolved: boolean) => void;
   /** Unresolved notes with something in them, oldest first. */
   feedbackForBrief: () => FeedbackEntry[];
+  /** What the plan was last checked against, per companion document. */
+  reconciled: Record<string, string>;
+  /** Records that the plan has now been checked against `digest`. */
+  setReconciled: (document: string, digest: string) => void;
   sidecar: Sidecar;
 }
 
@@ -162,11 +166,26 @@ function readFeedback(sidecar: Sidecar | undefined | null): FeedbackEntry[] {
  * empty so a plan reviewed before the panel existed is not rewritten by merely
  * being opened — the save effect compares this JSON against what was read.
  */
-function buildSidecar(comments: readonly Comment[], feedback: readonly FeedbackEntry[]): Sidecar {
+function buildSidecar(
+  comments: readonly Comment[],
+  feedback: readonly FeedbackEntry[],
+  reconciled: Record<string, string>,
+): Sidecar {
   const sidecar: Sidecar = { version: 1, comments: [...comments] };
   const notes = feedback.filter((entry) => entry.body.trim() !== "");
   if (notes.length > 0) sidecar.feedback = notes;
+  if (Object.keys(reconciled).length > 0) sidecar.reconciled = { ...reconciled };
   return sidecar;
+}
+
+function readReconciled(sidecar: Sidecar | undefined | null): Record<string, string> {
+  const raw: unknown = sidecar?.reconciled;
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return {};
+  const out: Record<string, string> = {};
+  for (const [name, digest] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof digest === "string") out[name] = digest;
+  }
+  return out;
 }
 
 /** The sidecar is a file on disk a human can edit — never trust its shape. */
@@ -241,6 +260,7 @@ function scrollParent(el: HTMLElement | null): HTMLElement | null {
 export function useAnnotations({ editor, enabled }: UseAnnotationsOptions): AnnotationsApi {
   const [comments, setComments] = useState<Comment[]>([]);
   const [feedback, setFeedback] = useState<FeedbackEntry[]>([]);
+  const [reconciled, setReconciledState] = useState<Record<string, string>>({});
   const [resolutions, setResolutions] = useState<Resolutions>({});
   const [activeId, setActiveIdState] = useState<string | null>(null);
   const [draft, setDraft] = useState<DraftAnchor | null>(null);
@@ -425,12 +445,16 @@ export function useAnnotations({ editor, enabled }: UseAnnotationsOptions): Anno
         if (cancelled) return;
         const loaded = sanitizeSidecar(response.sidecar);
         const loadedFeedback = readFeedback(response.sidecar);
+        const loadedReconciled = readReconciled(response.sidecar);
         revisionRef.current = response.revision;
-        savedJsonRef.current = JSON.stringify(buildSidecar(loaded, loadedFeedback));
+        savedJsonRef.current = JSON.stringify(
+          buildSidecar(loaded, loadedFeedback, loadedReconciled),
+        );
         loadedRef.current = true;
         loadAttemptedRef.current = true;
         setComments(loaded);
         setFeedback(loadedFeedback);
+        setReconciledState(loadedReconciled);
         setSync("idle");
         setSyncDetail(null);
       })
@@ -468,7 +492,9 @@ export function useAnnotations({ editor, enabled }: UseAnnotationsOptions): Anno
       const takeFeedback = localFeedback.length === 0 && diskFeedback.length > 0;
       if (!merged && !takeFeedback) return false;
 
-      savedJsonRef.current = JSON.stringify(buildSidecar(onDisk, diskFeedback));
+      savedJsonRef.current = JSON.stringify(
+        buildSidecar(onDisk, diskFeedback, readReconciled(remote)),
+      );
       if (merged) setComments(merged);
       if (takeFeedback) setFeedback(diskFeedback);
       setSync("idle");
@@ -517,8 +543,8 @@ export function useAnnotations({ editor, enabled }: UseAnnotationsOptions): Anno
   }, [adoptRemote]);
 
   const sidecar = useMemo<Sidecar>(
-    () => buildSidecar(comments, feedback),
-    [comments, feedback],
+    () => buildSidecar(comments, feedback, reconciled),
+    [comments, feedback, reconciled],
   );
 
   useEffect(() => {
@@ -673,6 +699,10 @@ export function useAnnotations({ editor, enabled }: UseAnnotationsOptions): Anno
     setFeedback((prev) =>
       prev.map((entry) => (entry.id === id ? { ...entry, resolved } : entry)),
     );
+  }, []);
+
+  const setReconciled = useCallback((document: string, digest: string) => {
+    setReconciledState((prev) => (prev[document] === digest ? prev : { ...prev, [document]: digest }));
   }, []);
 
   const resolveFeedbackMany = useCallback((ids: readonly string[], resolved: boolean) => {
@@ -864,6 +894,8 @@ export function useAnnotations({ editor, enabled }: UseAnnotationsOptions): Anno
     resolveFeedback,
     resolveFeedbackMany,
     feedbackForBrief,
+    reconciled,
+    setReconciled,
     sidecar,
   };
 

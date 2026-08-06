@@ -73,6 +73,8 @@ function annotationsOf(comments: Comment[], feedback: FeedbackEntry[] = []): Ann
     resolveFeedbackMany: () => {},
     feedbackForBrief: () =>
       feedback.filter((entry) => !entry.resolved && entry.body.trim() !== ""),
+    reconciled: {},
+    setReconciled: () => {},
     sidecar: feedback.length > 0
       ? { version: 1, comments, feedback }
       : { version: 1, comments },

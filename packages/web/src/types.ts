@@ -128,6 +128,13 @@ export interface Sidecar {
    * accepted and migrated to a single entry rather than discarded.
    */
   feedback?: FeedbackEntry[];
+  /**
+   * What the plan was last checked against, per companion: a digest of that
+   * document's implications at the moment the reviewer last reconciled the two.
+   * When it stops matching, the plan is being argued from something the
+   * research no longer says.
+   */
+  reconciled?: Record<string, string>;
 }
 
 export const EMPTY_SIDECAR: Sidecar = { version: 1, comments: [] };

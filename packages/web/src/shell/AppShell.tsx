@@ -44,6 +44,12 @@ export interface AppShellProps {
   companionTabs?: ReactNode;
   /** The companion overlay itself. Rendered last so it paints over everything. */
   companionDrawer?: ReactNode;
+  /**
+   * A quiet notice pinned over the canvas. It OVERLAYS — the page's geometry
+   * is load-bearing, and a strip that pushed the document down would move every
+   * comment anchor for a message nobody asked for.
+   */
+  banner?: ReactNode;
   /** The editor. Render it inside the white page. */
   children: ReactNode;
 }
@@ -61,6 +67,7 @@ export function AppShell({
   approveButton,
   companionTabs,
   companionDrawer,
+  banner,
   children,
 }: AppShellProps) {
   /*
@@ -148,6 +155,8 @@ export function AppShell({
        * there would have to be reserved for, and would push the page down the
        * moment a revision landed. See ReviewBar.css.
        */}
+      {banner}
+
       <ReviewBar tracking={tracking} />
 
       {/* Last, and fixed: it paints over the whole shell while it is open. */}

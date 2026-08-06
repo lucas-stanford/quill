@@ -165,6 +165,11 @@ export interface Sidecar {
    * and migrated to a single entry.
    */
   feedback?: FeedbackEntry[];
+  /**
+   * What the plan was last checked against, per companion — a digest of that
+   * document's implications when the two were last reconciled.
+   */
+  reconciled?: Record<string, string>;
 }
 
 export const EMPTY_SIDECAR: Sidecar = { version: 1, comments: [] };

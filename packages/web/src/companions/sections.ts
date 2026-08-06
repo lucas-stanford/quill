@@ -156,3 +156,38 @@ export function appendSection(markdown: string, text: string): string {
   const body = text.replace(/^\s+|\s+$/g, "");
   return `${trimmed}\n\n${body}\n`;
 }
+
+/**
+ * The section a plan is actually argued from.
+ *
+ * `research.md` ends in `## Implications for the plan` by convention — a
+ * numbered list of the decisions the research forces, which the milestones are
+ * supposed to honour. That section, not the whole document, is what the plan
+ * depends on: fixing a typo in a citation should not suggest the plan is out of
+ * date, and changing what the research CONCLUDES should.
+ *
+ * Falls back to the whole document when there is no such section, because a
+ * research document with no stated implications is one where any change might
+ * matter.
+ */
+export function implicationsOf(markdown: string): string {
+  const sections = splitSections(markdown);
+  const implications = sections.find((section) => /implication/i.test(section.title));
+  return (implications ? implications.body : markdown).trim();
+}
+
+/**
+ * A short, stable digest of a string.
+ *
+ * FNV-1a, not a cryptographic hash: this only ever answers "is this the same
+ * text as last time", it is compared against a value this same code wrote, and
+ * it lands in a sidecar a human reads — where 8 characters is kinder than 64.
+ */
+export function digest(text: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(16).padStart(8, "0");
+}

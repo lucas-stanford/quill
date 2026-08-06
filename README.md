@@ -152,6 +152,12 @@ node on purpose.
 You can also just type in it: companions autosave, and a write is refused if the agent
 changed the file underneath you rather than clobbering whichever side raced slower.
 
+When the research's **implications** change — the section the milestones were argued from —
+the plan says so, in a line pinned over the canvas that never moves the page: *"research.md
+now says something different."* Re-check the plan and it becomes an ordinary revision with
+the reason attached; or say it still holds and the mark moves on. Only the implications are
+watched, so correcting a citation is not a reason to be told the plan is stale.
+
 Opening a companion never touches the plan — the editor underneath keeps its pending
 tracked changes and comment anchors, so a glance at the research costs nothing. `Esc` or a
 click outside closes it.
@@ -193,7 +199,7 @@ sentence.
 ```bash
 pnpm install
 pnpm build          # web bundle, then the CLI that embeds it
-pnpm test           # 521 tests
+pnpm test           # 532 tests
 pnpm typecheck
 ```
 
