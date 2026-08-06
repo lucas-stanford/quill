@@ -312,3 +312,81 @@ describe("parseQueuedRevision", () => {
     assert.equal(parseQueuedRevision('{"id":"a"}').ok, false);
   });
 });
+describe("validateRevisionRequest — routing", () => {
+  const base = { brief: { markdown: "x" }, prompt: "do a thing" };
+  const scope = {
+    document: "research.md",
+    heading: "## Prior art",
+    text: "## Prior art\n\nThin.\n",
+    kind: "redo",
+    mode: "replace",
+  };
+
+  it("defaults to the plan when nothing says otherwise", () => {
+    // The whole backwards-compatibility story: an agent written against the
+    // original bridge sends neither field and gets exactly what it got before.
+    const result = validateRevisionRequest(base);
+
+    assert.equal(result.ok, true);
+    assert.equal(result.target, "plan");
+    assert.equal(result.scope, undefined);
+  });
+
+  it("carries a research target and its section", () => {
+    const result = validateRevisionRequest({ ...base, target: "research", scope });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.target, "research");
+    assert.equal(result.scope.document, "research.md");
+    assert.equal(result.scope.kind, "redo");
+    assert.equal(result.scope.mode, "replace");
+  });
+
+  it("keeps the reviewer's own words, and drops a blank one", () => {
+    const withNote = validateRevisionRequest({
+      ...base,
+      target: "research",
+      scope: { ...scope, note: "  four games please  " },
+    });
+    assert.equal(withNote.scope.note, "  four games please  ");
+
+    const blank = validateRevisionRequest({
+      ...base,
+      target: "research",
+      scope: { ...scope, note: "   " },
+    });
+    assert.equal("note" in blank.scope, false);
+  });
+
+  it("refuses a research request with nothing to act on", () => {
+    const result = validateRevisionRequest({ ...base, target: "research" });
+
+    assert.equal(result.ok, false);
+    assert.match(result.reason, /body\.scope is required/);
+  });
+
+  it("names the offending field", () => {
+    const cases = [
+      [{ ...base, target: "sideways" }, /body\.target must be "plan" or "research"/],
+      [{ ...base, target: 7 }, /body\.target must be a string/],
+      [
+        { ...base, target: "research", scope: { ...scope, kind: "ponder" } },
+        /body\.scope\.kind must be/,
+      ],
+      [
+        { ...base, target: "research", scope: { ...scope, mode: "sideways" } },
+        /body\.scope\.mode must be/,
+      ],
+      [
+        { ...base, target: "research", scope: { ...scope, document: 3 } },
+        /body\.scope\.document must be a string/,
+      ],
+    ];
+    for (const [value, pattern] of cases) {
+      const result = validateRevisionRequest(value);
+      assert.equal(result.ok, false, JSON.stringify(value));
+      assert.match(result.reason, pattern);
+    }
+  });
+});
+

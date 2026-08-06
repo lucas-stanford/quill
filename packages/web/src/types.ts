@@ -165,6 +165,8 @@ export interface CompanionList {
 /** GET /api/companions/:name */
 export interface CompanionDocument extends CompanionSummary {
   markdown: string;
+  /** sha256 of the markdown. Companions are editable, so writes are guarded. */
+  revision: string;
 }
 
 /* ── M4: the AI round-trip ────────────────────────────────────────────────
@@ -203,6 +205,19 @@ export interface RevisionBrief {
 }
 
 export type RevisionStatus = "idle" | "queued" | "working" | "done" | "failed" | "cancelled";
+
+/** Which document a request is about. Absent means the plan. */
+export type RevisionTarget = "plan" | "research";
+
+/** The section of a companion a request is about. */
+export interface RevisionScope {
+  document: string;
+  heading: string;
+  text: string;
+  kind: "redo" | "deepen" | "add";
+  mode: "replace" | "append";
+  note?: string;
+}
 
 /** POST /api/revision — asks for a revision. */
 export interface RevisionRequest {

@@ -54,7 +54,7 @@ rather than reading about.
   section rather than a convention, so the propagation banner can diff it exactly
   rather than by matching a heading.
 
-## M1 — Research you can edit: type into research.md and it saves, like the plan
+## M1 — DONE. Research you can edit: type into research.md and it saves, like the plan
 
 1. Add `PUT /api/companions/:name`, mirroring the plan's revision-guarded write,
    so a companion save is conflict-safe against an agent writing the same file.
@@ -66,7 +66,7 @@ rather than reading about.
 4. Watch companions and push external changes the way `/api/live` does for the
    plan, so an agent still writing research cannot leave a stale page open.
 
-## M2 — Sections you can act on: Redo a thin section and watch it come back marked up
+## M2 — DONE (bar the sidecar). Sections you can act on: Redo a thin section and watch it land
 
 1. Parse the open companion into `##` sections and surface the section under the
    caret as the unit the verbs act on.

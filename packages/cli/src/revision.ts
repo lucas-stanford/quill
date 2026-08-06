@@ -35,8 +35,8 @@ import { randomUUID } from "node:crypto";
 import { watch, rmSync } from "node:fs";
 import type { FSWatcher } from "node:fs";
 import { mkdir, readFile, rm } from "node:fs/promises";
-import { basename } from "node:path";
-import type { RevisionBrief, RevisionState } from "./types.js";
+import { basename, dirname, join } from "node:path";
+import type { RevisionBrief, RevisionScope, RevisionState, RevisionTarget } from "./types.js";
 import { writeFileAtomic } from "./atomic.js";
 import {
   QUILL_DIR,
@@ -133,6 +133,8 @@ function normalizeAgentMarkdown(raw: string): string {
 
 export class RevisionManager {
   readonly planPath: string;
+  /** The document the request in flight is about; the plan unless scoped. */
+  #targetPath: string;
   readonly mode: RevisionMode;
   readonly requestPath: string;
   readonly responsePath: string;
@@ -148,6 +150,7 @@ export class RevisionManager {
 
   constructor(options: RevisionManagerOptions) {
     this.planPath = options.planPath;
+    this.#targetPath = options.planPath;
     this.mode = options.mode;
     this.requestPath = revisionRequestPathFor(options.planPath);
     this.responsePath = revisionResponsePathFor(options.planPath);
@@ -196,7 +199,12 @@ export class RevisionManager {
   }
 
   /** `POST /api/revision`. One revision at a time; a second is refused, not raced. */
-  async start(brief: RevisionBrief, prompt: string): Promise<StartResult> {
+  async start(
+    brief: RevisionBrief,
+    prompt: string,
+    target: RevisionTarget = "plan",
+    scope?: RevisionScope,
+  ): Promise<StartResult> {
     if (this.busy) {
       return {
         ok: false,
@@ -207,6 +215,15 @@ export class RevisionManager {
     }
 
     const id = randomUUID();
+    /*
+     * Where the answer will be read back from. A research request is answered
+     * by rewriting the companion, not the plan, so reading the plan afterwards
+     * would hand the browser a document nobody was asked to change.
+     */
+    this.#targetPath =
+      target === "research" && scope
+        ? join(dirname(this.planPath), scope.document)
+        : this.planPath;
     this.#state = { id, status: "queued", mode: this.mode };
     this.#inFlight = {
       id,
@@ -229,6 +246,10 @@ export class RevisionManager {
         createdAt: new Date().toISOString(),
         prompt,
       };
+      // Omitted for a plan request, so the file an existing agent reads is
+      // byte-for-byte what it read before.
+      if (target !== "plan") queued.target = target;
+      if (scope) queued.scope = scope;
       try {
         await mkdir(quillDirFor(this.planPath), { recursive: true });
         // Clear any stale reply *before* publishing the request, so a fast
@@ -456,10 +477,10 @@ export class RevisionManager {
     let markdown = response.markdown;
     if (markdown === undefined) {
       try {
-        markdown = await readFile(this.planPath, "utf-8");
+        markdown = await readFile(this.#targetPath, "utf-8");
       } catch (err) {
         this.#logger.error(
-          `quill: revision ${id} reported done but ${basename(this.planPath)} could not be read — ${(err as Error).message}`,
+          `quill: revision ${id} reported done but ${basename(this.#targetPath)} could not be read — ${(err as Error).message}`,
         );
       }
     }

@@ -21,7 +21,7 @@ import type {
 import { hashContent } from "./hash.js";
 import { writeFileAtomic } from "./atomic.js";
 import { resolveStaticPath } from "./static-path.js";
-import { listCompanions, readCompanion } from "./companions.js";
+import { listCompanions, readCompanion, writeCompanion } from "./companions.js";
 import { buildTicketPlan, countOpenComments, createTickets } from "./review.js";
 import {
   EMPTY_SIDECAR_REVISION,
@@ -312,6 +312,51 @@ async function handleApiPlanPut(
   sendJson(res, 200, body);
 }
 
+/** PUT /api/companions/:name — the same guarded write the plan gets. */
+async function handleApiCompanionPut(
+  planPath: string,
+  requested: string,
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> {
+  let rawBody: string;
+  try {
+    rawBody = await readBody(req);
+  } catch {
+    sendJson(res, 400, { error: "Request body too large" });
+    return;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawBody);
+  } catch {
+    sendJson(res, 400, { error: "Invalid JSON body" });
+    return;
+  }
+
+  const raw = parsed as Record<string, unknown> | null;
+  if (!raw || typeof raw !== "object" || typeof raw.markdown !== "string") {
+    sendJson(res, 400, { error: "body.markdown must be a string" });
+    return;
+  }
+  if (typeof raw.revision !== "string") {
+    sendJson(res, 400, { error: "body.revision must be a string" });
+    return;
+  }
+
+  const result = await writeCompanion(planPath, requested, raw.markdown, raw.revision);
+  if (result.ok) {
+    sendJson(res, 200, result.document);
+    return;
+  }
+  if (result.status === 409 && result.current) {
+    sendJson(res, 409, { error: result.error, current: result.current });
+    return;
+  }
+  sendJson(res, result.status, { error: result.error } satisfies ErrorResponse);
+}
+
 // ---------------------------------------------------------------------------
 // Annotations (review sidecar)
 // ---------------------------------------------------------------------------
@@ -529,7 +574,12 @@ async function handleApiRevisionPost(
     return;
   }
 
-  const started = await revision.start(validated.brief, validated.prompt);
+  const started = await revision.start(
+    validated.brief,
+    validated.prompt,
+    validated.target,
+    validated.scope,
+  );
   if (!started.ok) {
     sendJson(res, started.status, { error: started.error, current: started.current });
     return;
@@ -772,8 +822,8 @@ function createHandler(
     }
 
     if (pathname.startsWith("/api/companions/")) {
-      if (method !== "GET") {
-        res.writeHead(405, { "Content-Type": "text/plain", Allow: "GET" });
+      if (method !== "GET" && method !== "PUT") {
+        res.writeHead(405, { "Content-Type": "text/plain", Allow: "GET, PUT" });
         res.end("Method Not Allowed");
         return;
       }
@@ -789,6 +839,11 @@ function createHandler(
         sendJson(res, 404, { error: "Not a companion document" } satisfies ErrorResponse);
         return;
       }
+      if (method === "PUT") {
+        await handleApiCompanionPut(planPath, requested, req, res);
+        return;
+      }
+
       const result = await readCompanion(planPath, requested);
       if (result.ok) {
         sendJson(res, 200, result.document);

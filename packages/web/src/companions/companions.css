@@ -148,3 +148,229 @@
     padding: 24px 20px;
   }
 }
+
+/* ── Editing surface ────────────────────────────────────────────────────
+   The drawer is a document you work in now, not a page you read. */
+
+.companion-status {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--font-chrome, system-ui, sans-serif);
+  font-size: 11px;
+  color: var(--color-text-muted, #8a8a8e);
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.companion-split {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.companion-outline {
+  flex: 0 0 auto;
+  width: 208px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  overflow-y: auto;
+  background: var(--color-titlebar-bg, #1c1c1f);
+  border-right: 1px solid var(--color-titlebar-border, #2d2d30);
+}
+
+.companion-outline-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.companion-outline-item {
+  width: 100%;
+  padding: 4px 7px;
+  font-family: var(--font-chrome, system-ui, sans-serif);
+  font-size: 11.5px;
+  line-height: 1.4;
+  text-align: left;
+  color: var(--color-text-muted, #8a8a8e);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.companion-outline-item:hover {
+  color: var(--color-text, #e6e6e6);
+}
+
+.companion-outline-item[data-active] {
+  color: var(--color-text, #e6e6e6);
+  background: var(--color-canvas, #17171a);
+  border-color: var(--color-titlebar-border, #2d2d30);
+}
+
+.companion-outline-empty {
+  font-family: var(--font-chrome, system-ui, sans-serif);
+  font-size: 11px;
+  color: var(--color-text-muted, #8a8a8e);
+}
+
+.companion-verbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-titlebar-border, #2d2d30);
+}
+
+.companion-action {
+  padding: 3px 8px;
+  font-family: var(--font-chrome, system-ui, sans-serif);
+  font-size: 11px;
+  color: var(--color-text-muted, #8a8a8e);
+  background: transparent;
+  border: 1px solid var(--color-titlebar-border, #2d2d30);
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.companion-action:hover:not(:disabled),
+.companion-action:focus-visible:not(:disabled) {
+  color: var(--color-text, #e6e6e6);
+  border-color: var(--color-text-muted, #8a8a8e);
+  outline: none;
+}
+
+.companion-action:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.companion-action--primary {
+  color: var(--color-canvas, #17171a);
+  background: var(--color-accent, #4fa3e0);
+  border-color: var(--color-accent, #4fa3e0);
+}
+
+.companion-action--danger:hover:not(:disabled) {
+  color: var(--color-danger, #e06c6c);
+  border-color: var(--color-danger, #e06c6c);
+}
+
+.companion-cut {
+  padding-top: 8px;
+  border-top: 1px solid var(--color-titlebar-border, #2d2d30);
+}
+
+.companion-cut-title {
+  margin: 0 0 6px;
+  font-family: var(--font-chrome, system-ui, sans-serif);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted, #8a8a8e);
+}
+
+.companion-cut-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.companion-cut-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: space-between;
+}
+
+.companion-cut-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--font-chrome, system-ui, sans-serif);
+  font-size: 11px;
+  color: var(--color-text-muted, #8a8a8e);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Ask dialog ─────────────────────────────────────────────────────────── */
+
+.companion-ask {
+  position: absolute;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  width: min(560px, calc(100% - 48px));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  background: var(--color-titlebar-bg, #1c1c1f);
+  border: 1px solid var(--color-accent, #4fa3e0);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 55%);
+}
+
+.companion-ask-what {
+  margin: 0;
+  font-family: var(--font-chrome, system-ui, sans-serif);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text, #e6e6e6);
+}
+
+.companion-ask-input {
+  width: 100%;
+  box-sizing: border-box;
+  resize: none;
+  padding: 8px 9px;
+  font-family: var(--font-chrome, system-ui, sans-serif);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--color-text, #e6e6e6);
+  background: var(--color-canvas, #17171a);
+  border: 1px solid var(--color-titlebar-border, #2d2d30);
+  border-radius: 6px;
+}
+
+.companion-ask-input:focus-visible {
+  outline: none;
+  border-color: var(--color-accent, #4fa3e0);
+}
+
+.companion-ask-mode {
+  display: flex;
+  gap: 14px;
+  font-family: var(--font-chrome, system-ui, sans-serif);
+  font-size: 11.5px;
+  color: var(--color-text-muted, #8a8a8e);
+}
+
+.companion-ask-mode label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+}
+
+.companion-ask-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* The panel is the positioning context for the ask dialog. */
+.companion-panel {
+  position: relative;
+}

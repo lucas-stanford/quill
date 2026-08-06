@@ -5,6 +5,7 @@ import type {
   ConflictResponse,
   PlanResponse,
   RevisionBrief,
+  RevisionScope,
   RevisionState,
   ReviewOutcome,
   ReviewSummary,
@@ -93,6 +94,30 @@ export async function requestRevision(
   return (await res.json()) as RevisionState;
 }
 
+/**
+ * Asks the agent to act on one section of a companion.
+ *
+ * The same endpoint and the same queue file as a plan revision, with the
+ * routing attached: one channel means one request in flight, which is the
+ * behaviour you want — an agent should not be rewriting the plan and re-running
+ * research in the same moment.
+ */
+export async function requestSectionRevision(
+  brief: RevisionBrief,
+  prompt: string,
+  scope: RevisionScope,
+): Promise<RevisionState> {
+  const res = await fetch("/api/revision", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ brief, prompt, target: "research", scope }),
+  });
+  if (!res.ok) {
+    throw new Error(await errorMessage(res, `Failed to request a revision (${res.status})`));
+  }
+  return (await res.json()) as RevisionState;
+}
+
 /** Polls the current revision. */
 export async function fetchRevision(): Promise<RevisionState> {
   const res = await fetch("/api/revision");
@@ -138,11 +163,47 @@ export async function fetchCompanions(): Promise<CompanionList> {
   return (await res.json()) as CompanionList;
 }
 
+/** Thrown when a companion write is rejected because the file moved. */
+export class CompanionConflictError extends Error {
+  readonly current: CompanionDocument;
+  constructor(message: string, current: CompanionDocument) {
+    super(message);
+    this.name = "CompanionConflictError";
+    this.current = current;
+  }
+}
+
 /** One companion's current contents. Re-read on every open, never cached. */
 export async function fetchCompanion(name: string): Promise<CompanionDocument> {
   const res = await fetch(`/api/companions/${encodeURIComponent(name)}`);
   if (!res.ok) {
     throw new Error(await errorMessage(res, `Failed to load ${name} (${res.status})`));
+  }
+  return (await res.json()) as CompanionDocument;
+}
+
+/**
+ * Writes a companion. `revision` is what the edit was based on; the server
+ * rejects the write with 409 if the file changed underneath it — which here
+ * usually means the agent answered a re-run while you were typing.
+ */
+export async function saveCompanion(
+  name: string,
+  markdown: string,
+  revision: string,
+): Promise<CompanionDocument> {
+  const res = await fetch(`/api/companions/${encodeURIComponent(name)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ markdown, revision }),
+  });
+
+  if (res.status === 409) {
+    const body = (await res.json()) as { error?: string; current: CompanionDocument };
+    throw new CompanionConflictError(body.error ?? "The file changed on disk", body.current);
+  }
+  if (!res.ok) {
+    throw new Error(await errorMessage(res, `Failed to save ${name} (${res.status})`));
   }
   return (await res.json()) as CompanionDocument;
 }

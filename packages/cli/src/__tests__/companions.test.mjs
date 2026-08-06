@@ -1,6 +1,6 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { writeFileSync, mkdirSync } from "node:fs";
+import { writeFileSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -10,6 +10,7 @@ import {
   listCompanions,
   readCompanion,
   resolveCompanionName,
+  writeCompanion,
 } from "../companions.js";
 import { makeWorkspace, removeWorkspace } from "./helpers.mjs";
 
@@ -158,5 +159,74 @@ describe("readCompanion", () => {
     assert.equal(result.status, 404);
 
     removeWorkspace(bare);
+  });
+});
+
+describe("writeCompanion", () => {
+  it("writes when the revision matches, and reports the new one", async () => {
+    const ws = makeWorkspace("companions-write");
+    const plan = join(ws, "PLAN.md");
+    writeFileSync(plan, "# Plan\n");
+    writeFileSync(join(ws, "research.md"), "# Research\n\n## One\n\nOld.\n");
+
+    const before = await readCompanion(plan, "research.md");
+    const written = await writeCompanion(
+      plan,
+      "research.md",
+      "# Research\n\n## One\n\nNew.\n",
+      before.document.revision,
+    );
+
+    assert.equal(written.ok, true);
+    assert.notEqual(written.document.revision, before.document.revision);
+    assert.match(readFileSync(join(ws, "research.md"), "utf8"), /New\./);
+
+    removeWorkspace(ws);
+  });
+
+  it("refuses a stale write and hands back what is actually there", async () => {
+    // The other writer is usually the agent answering a re-run, so this path is
+    // routine. Losing whichever side raced slower would lose real work.
+    const ws = makeWorkspace("companions-stale");
+    const plan = join(ws, "PLAN.md");
+    writeFileSync(plan, "# Plan\n");
+    writeFileSync(join(ws, "research.md"), "# Research\n");
+
+    const result = await writeCompanion(plan, "research.md", "clobbered", "not-the-revision");
+
+    assert.equal(result.ok, false);
+    assert.equal(result.status, 409);
+    assert.equal(result.current.markdown, "# Research\n");
+    assert.equal(readFileSync(join(ws, "research.md"), "utf8"), "# Research\n");
+
+    removeWorkspace(ws);
+  });
+
+  it("refuses to write a name that is not a companion", async () => {
+    const ws = makeWorkspace("companions-write-guard");
+    const plan = join(ws, "PLAN.md");
+    writeFileSync(plan, "# Plan\n");
+    writeFileSync(join(ws, "secret.txt"), "SECRET\n");
+
+    const result = await writeCompanion(plan, "../secret.txt", "owned", "whatever");
+
+    assert.equal(result.ok, false);
+    assert.equal(result.status, 404);
+    assert.equal(readFileSync(join(ws, "secret.txt"), "utf8"), "SECRET\n");
+
+    removeWorkspace(ws);
+  });
+
+  it("will not create a companion that does not exist", async () => {
+    const ws = makeWorkspace("companions-write-missing");
+    const plan = join(ws, "PLAN.md");
+    writeFileSync(plan, "# Plan\n");
+
+    const result = await writeCompanion(plan, "research.md", "new", "whatever");
+
+    assert.equal(result.ok, false);
+    assert.equal(result.status, 404);
+
+    removeWorkspace(ws);
   });
 });

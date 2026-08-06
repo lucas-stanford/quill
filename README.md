@@ -126,13 +126,27 @@ A plan is an argument, and an argument is only reviewable next to its evidence. 
 `research.md` or a `reference.md` sits beside the plan, Quill offers it as a button in the
 title bar and opens it as a read-only reading pane over the document.
 
-They are read-only on purpose: the plan is the artifact that becomes tickets and the only
-thing the exit protocol reports on. They are also re-read every time you open one, so an
-agent that is still writing its research while you review the plan is never showing you a
-stale page. Opening one never touches the plan — the editor underneath keeps its pending
-tracked changes and comment anchors, so a glance at the research costs nothing.
+Research is not only readable, it is **workable**. The drawer lists the document's `##`
+sections — its lines of enquiry — and each one can be:
 
-`Esc` or a click outside closes it.
+| | |
+|---|---|
+| **Redo** | it is thin, stale or wrong; go and find out again |
+| **Deepen** | keep it, and answer one more question |
+| **Add** | open a new line of enquiry |
+| **Cut** | take it out — recoverable from a tray, because research is evidence |
+
+Redo and Deepen ask whether the answer should replace the section or arrive as a further
+pass, then go out over the same agent bridge as **Update with AI** (see `AGENT-BRIDGE.md`,
+§4a). One request is in flight at a time regardless of which document it is about. When the
+answer lands, **Undo the re-run** puts the document back exactly as it was.
+
+You can also just type in it: companions autosave, and a write is refused if the agent
+changed the file underneath you rather than clobbering whichever side raced slower.
+
+Opening a companion never touches the plan — the editor underneath keeps its pending
+tracked changes and comment anchors, so a glance at the research costs nothing. `Esc` or a
+click outside closes it.
 
 ## Handoff to ferricket
 
@@ -170,7 +184,7 @@ sentence.
 ```bash
 pnpm install
 pnpm build          # web bundle, then the CLI that embeds it
-pnpm test           # 486 tests
+pnpm test           # 508 tests
 pnpm typecheck
 ```
 

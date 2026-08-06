@@ -156,6 +156,58 @@ curl -sS -X PUT http://127.0.0.1:7823/api/revision \
 Identical semantics. The file is the primary interface because it needs no port,
 survives a restart of your poller, and works from a `Makefile`.
 
+## 4a. Research requests
+
+Most requests are about the plan. Some are about one section of a companion
+document beside it — `research.md` — because research is an accumulation of
+lines of enquiry and the reviewer wants one of them re-run, pushed further, or
+replaced.
+
+Those requests arrive on **this same channel**, with two extra fields:
+
+```json
+{
+  "id": "…",
+  "planPath": "/Users/lucas/work/PLAN.md",
+  "target": "research",
+  "scope": {
+    "document": "research.md",
+    "heading": "## Prior art",
+    "text": "## Prior art\n\nThin. We looked at one game.\n",
+    "kind": "redo",
+    "mode": "replace",
+    "note": "Look at at least four comparable games."
+  },
+  "brief": { "markdown": "…the whole research document…", "comments": [], "edits": [] },
+  "prompt": "…",
+  "createdAt": "…"
+}
+```
+
+**`target` is absent for a plan request.** If you already implement this
+protocol and never read these fields, nothing changes for you: every request you
+have ever handled still says nothing about a target, and still means the plan.
+
+When `target` is `"research"`:
+
+| Field | |
+|---|---|
+| `scope.document` | the file to edit, always beside the plan |
+| `scope.heading` | the section's heading, verbatim |
+| `scope.text` | that section exactly as it stands right now |
+| `scope.kind` | `redo` (it is unreliable, go again), `deepen` (keep it, go further), `add` (a new line of enquiry) |
+| `scope.mode` | `replace` that section, or `append` your answer after it as a further pass |
+| `scope.note` | the reviewer's own words, when they gave any |
+
+**Edit `scope.document`, not the plan**, and leave every other section
+byte-identical — the request is targeted, and rewriting the whole file turns one
+question into a diff nobody can read. Then answer exactly as you would for a
+plan: write `.quill/revision-response.json` with `{ "id": …, "status": "done" }`.
+
+Quill reads the file you edited — not the plan — and hands it back to the
+browser. One request is in flight at a time regardless of target, so you will
+never be asked to rewrite the plan and re-run research in the same moment.
+
 ## 5. Timeouts and cancellation
 
 - A revision that is never answered fails after **5 minutes** with a message

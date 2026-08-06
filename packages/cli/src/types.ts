@@ -37,6 +37,14 @@ export interface CompanionList {
 /** GET /api/companions/:name */
 export interface CompanionDocument extends CompanionSummary {
   markdown: string;
+  /** sha256 of the markdown, hex. Companions are editable, so writes are guarded. */
+  revision: string;
+}
+
+/** PUT /api/companions/:name */
+export interface SaveCompanionRequest {
+  markdown: string;
+  revision: string;
 }
 
 export interface ErrorResponse {
@@ -179,6 +187,35 @@ export interface RevisionBrief {
 }
 
 export type RevisionStatus = "idle" | "queued" | "working" | "done" | "failed" | "cancelled";
+
+/**
+ * Which document a request is about. Absent means the plan, so every agent
+ * written against the original bridge keeps working untouched.
+ */
+export type RevisionTarget = "plan" | "research";
+
+/**
+ * The part of a companion a request is about.
+ *
+ * Research is an accumulation of lines of enquiry, so the unit is the section:
+ * you re-run one, or push one further, without disturbing the findings you were
+ * happy with. The section's current text travels with the request so the agent
+ * replaces exactly it rather than guessing at boundaries.
+ */
+export interface RevisionScope {
+  /** Companion file name, e.g. "research.md". */
+  document: string;
+  /** The section heading, verbatim, including its `##`. */
+  heading: string;
+  /** The section as it stands right now. */
+  text: string;
+  /** Re-run it from scratch, push it further, or open a new line of enquiry. */
+  kind: "redo" | "deepen" | "add";
+  /** Whether the answer replaces the section or is added as a further pass. */
+  mode: "replace" | "append";
+  /** The reviewer's own words, for `deepen` and `add`. */
+  note?: string;
+}
 
 /** POST /api/revision — asks for a revision. */
 export interface RevisionRequest {

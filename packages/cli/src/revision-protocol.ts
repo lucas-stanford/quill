@@ -16,7 +16,14 @@
  * or `jq -r .prompt` it with no client library.
  */
 import { dirname, join } from "node:path";
-import type { BriefComment, BriefEdit, QueuedRevision, RevisionBrief } from "./types.js";
+import type {
+  BriefComment,
+  BriefEdit,
+  QueuedRevision,
+  RevisionBrief,
+  RevisionScope,
+  RevisionTarget,
+} from "./types.js";
 import {
   collectShapeErrors,
   fail,
@@ -54,6 +61,10 @@ export function revisionResponsePathFor(planPath: string): string {
  */
 export interface QueuedRevisionFile extends QueuedRevision {
   prompt: string;
+  /** Absent means the plan — see RevisionTarget. */
+  target?: RevisionTarget;
+  /** Present when the request is about one section of a companion. */
+  scope?: RevisionScope;
 }
 
 /** Pretty-printed with a trailing newline: a human and `jq` both have to read it. */
@@ -197,8 +208,48 @@ export function validateRevisionBrief(value: unknown, where = "brief"): BriefRes
 }
 
 export type RevisionRequestResult =
-  | { ok: true; brief: RevisionBrief; prompt: string }
+  | { ok: true; brief: RevisionBrief; prompt: string; target: RevisionTarget; scope?: RevisionScope }
   | { ok: false; reason: string };
+
+const SCOPE_KINDS = new Set(["redo", "deepen", "add"]);
+const SCOPE_MODES = new Set(["replace", "append"]);
+
+/**
+ * Reads the optional routing half of a request.
+ *
+ * Absent `target` means the plan. That default is the whole backwards-
+ * compatibility story: an agent written against the original bridge sends
+ * neither field and keeps getting exactly what it got before.
+ */
+function readTarget(raw: Record<string, unknown>): RevisionTarget {
+  if (raw.target === undefined || raw.target === null) return "plan";
+  const target = requireString(raw.target, "body.target");
+  if (target !== "plan" && target !== "research") {
+    fail('body.target must be "plan" or "research"');
+  }
+  return target;
+}
+
+function readScope(value: unknown, where: string): RevisionScope {
+  const raw = requireRecord(value, where);
+  const kind = requireString(raw.kind, `${where}.kind`);
+  if (!SCOPE_KINDS.has(kind)) fail(`${where}.kind must be "redo", "deepen" or "add"`);
+  const mode = requireString(raw.mode, `${where}.mode`);
+  if (!SCOPE_MODES.has(mode)) fail(`${where}.mode must be "replace" or "append"`);
+
+  const scope: RevisionScope = {
+    document: requireString(raw.document, `${where}.document`),
+    heading: requireString(raw.heading, `${where}.heading`),
+    text: requireString(raw.text, `${where}.text`),
+    kind: kind as RevisionScope["kind"],
+    mode: mode as RevisionScope["mode"],
+  };
+  if (raw.note !== undefined && raw.note !== null) {
+    const note = requireString(raw.note, `${where}.note`);
+    if (note.trim().length > 0) scope.note = note;
+  }
+  return scope;
+}
 
 /**
  * Validates a `POST /api/revision` body: `{ brief: RevisionBrief; prompt: string }`.
@@ -230,7 +281,24 @@ export function validateRevisionRequest(value: unknown): RevisionRequestResult {
   if (raw.prompt.trim().length === 0) {
     return { ok: false, reason: "body.prompt must not be empty" };
   }
-  return { ok: true, brief: brief.brief, prompt: raw.prompt };
+  const routing = collectShapeErrors<{ target: RevisionTarget; scope?: RevisionScope }>(() => {
+    const target = readTarget(raw);
+    if (raw.scope === undefined || raw.scope === null) {
+      // A research request without a section is a request with nothing to do.
+      if (target === "research") fail("body.scope is required when body.target is \"research\"");
+      return { target };
+    }
+    return { target, scope: readScope(raw.scope, "body.scope") };
+  });
+  if (!routing.ok) return { ok: false, reason: routing.reason };
+
+  return {
+    ok: true,
+    brief: brief.brief,
+    prompt: raw.prompt,
+    target: routing.value.target,
+    scope: routing.value.scope,
+  };
 }
 
 /* ── The parent agent's reply ────────────────────────────────────────────── */
