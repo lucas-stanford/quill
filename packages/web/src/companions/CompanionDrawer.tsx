@@ -40,7 +40,9 @@ export function CompanionDrawer({ companions }: { companions: CompanionsApi }) {
   const [note, setNote] = useState("");
   const [mode, setMode] = useState<"replace" | "append">("replace");
   const [cut, setCut] = useState<{ title: string; text: string }[]>([]);
-  const [view, setView] = useState<"document" | "examples">("document");
+  /** The example being looked at full size, if any. */
+  const [lightbox, setLightbox] = useState<string | null>(null);
+  const [showMedia, setShowMedia] = useState(true);
 
   const examples = useExamples(open !== null);
 
@@ -50,7 +52,7 @@ export function CompanionDrawer({ companions }: { companions: CompanionsApi }) {
     onResult: document.replaceAll,
     onExamples: () => {
       examples.reload();
-      setView("examples");
+      setShowMedia(true);
     },
   });
 
@@ -68,12 +70,13 @@ export function CompanionDrawer({ companions }: { companions: CompanionsApi }) {
       if (event.key !== "Escape") return;
       event.stopPropagation();
       // Whatever is on top goes first: the ask dialog, then the drawer.
-      if (asking !== null) setAsking(null);
+      if (lightbox !== null) setLightbox(null);
+      else if (asking !== null) setAsking(null);
       else close();
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [open, close, asking]);
+  }, [open, close, asking, lightbox]);
 
   useEffect(() => {
     if (open) panelRef.current?.focus();
@@ -142,7 +145,7 @@ export function CompanionDrawer({ companions }: { companions: CompanionsApi }) {
       ? replaceSection(document.markdown, target, citeInto(target.text, line))
       : `${document.markdown.replace(/\s+$/, "")}\n\n${line}\n`;
     document.replaceAll(next);
-    setView("document");
+    setLightbox(null);
   };
 
   const restore = (index: number) => {
@@ -168,24 +171,17 @@ export function CompanionDrawer({ companions }: { companions: CompanionsApi }) {
             <span className="companion-label">{open.label}</span>
             <span className="companion-filename">{open.name}</span>
           </div>
-          <div className="companion-views" role="group" aria-label="View">
+          {examples.examples.length > 0 ? (
             <button
               type="button"
               className="companion-action"
-              data-active={view === "document" || undefined}
-              onClick={() => setView("document")}
+              data-active={showMedia || undefined}
+              onClick={() => setShowMedia((open) => !open)}
+              title="Show or hide the examples beside the document"
             >
-              Document
+              Examples ({examples.examples.length})
             </button>
-            <button
-              type="button"
-              className="companion-action"
-              data-active={view === "examples" || undefined}
-              onClick={() => setView("examples")}
-            >
-              Examples{examples.examples.length > 0 ? ` (${examples.examples.length})` : ""}
-            </button>
-          </div>
+          ) : null}
           {statusLine ? (
             <span className="companion-status" aria-live="polite">
               {statusLine}
@@ -300,22 +296,43 @@ export function CompanionDrawer({ companions }: { companions: CompanionsApi }) {
           </nav>
 
           <div className="companion-body">
-            {view === "document" ? (
-              <div className="companion-sheet">
-                {editor ? <EditorContent editor={editor} /> : null}
-              </div>
-            ) : (
-              <Gallery
-                examples={examples.examples}
-                imageUrl={examples.imageUrl}
-                onCite={cite}
-                onCut={examples.cut}
-                onFind={() => ask("examples", active)}
-                busy={busy}
-              />
-            )}
+            <div className="companion-sheet">
+              {editor ? <EditorContent editor={editor} /> : null}
+            </div>
           </div>
+
+          {/*
+           * Beside the document, not instead of it. A toggle between reading
+           * the research and looking at the screenshots is the wrong shape:
+           * the pictures are the evidence for what the words claim, and you
+           * want them in view while you read — and while you cite one.
+           */}
+          {showMedia && examples.examples.length > 0 ? (
+            <MediaSidebar
+              examples={examples.examples}
+              imageUrl={examples.imageUrl}
+              onOpen={setLightbox}
+              onCite={cite}
+              onFind={() => ask("examples", active)}
+              busy={busy}
+            />
+          ) : null}
         </div>
+
+        {lightbox !== null
+          ? (() => {
+              const example = examples.examples.find((e) => e.id === lightbox);
+              return example ? (
+                <Lightbox
+                  example={example}
+                  imageUrl={examples.imageUrl}
+                  onClose={() => setLightbox(null)}
+                  onCite={cite}
+                  onCut={examples.cut}
+                />
+              ) : null;
+            })()
+          : null}
 
         {asking ? (
           <div className="companion-ask" role="dialog" aria-label="Ask the agent">
@@ -393,112 +410,20 @@ export function CompanionDrawer({ companions }: { companions: CompanionsApi }) {
   );
 }
 
-/* ── Gallery ──────────────────────────────────────────────────────────────
-   What other people did. Some of a design is learned by reading and some of
-   it only by looking, which is the whole reason this is pictures and not a
-   list of links. */
-
-interface GalleryProps {
-  examples: Example[];
-  imageUrl: (image: string) => string;
-  onCite: (id: string) => void;
-  onCut: (id: string) => void;
-  onFind: () => void;
-  busy: boolean;
-}
-
-function Gallery({ examples, imageUrl, onCite, onCut, onFind, busy }: GalleryProps) {
-  if (examples.length === 0) {
-    return (
-      <div className="companion-gallery-empty">
-        <p>
-          Nothing here yet. Ask the agent to go and find how comparable products did
-          this — competitors, prior art, and above all the screens.
-        </p>
-        <button
-          type="button"
-          className="companion-action companion-action--primary"
-          onClick={onFind}
-          disabled={busy}
-        >
-          Find examples
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <ul className="companion-gallery">
-      {examples.map((example) => (
-        <li key={example.id} className="companion-example">
-          <a
-            className="companion-example-shot"
-            href={example.source || imageUrl(example.image)}
-            target="_blank"
-            rel="noreferrer noopener"
-            title={example.source || example.image}
-          >
-            <img src={imageUrl(example.image)} alt={example.title} loading="lazy" />
-          </a>
-          <div className="companion-example-meta">
-            <span className="companion-example-title">{example.title}</span>
-            {example.note ? (
-              <span className="companion-example-note">{example.note}</span>
-            ) : null}
-            {example.source ? (
-              <a
-                className="companion-example-source"
-                href={example.source}
-                target="_blank"
-                rel="noreferrer noopener"
-              >
-                {hostOf(example.source)}
-              </a>
-            ) : (
-              /* A screenshot with no source is a picture, not evidence. Say so
-                 rather than letting it pass as a finding. */
-              <span className="companion-example-nosource">no source</span>
-            )}
-            <div className="companion-example-actions">
-              <button
-                type="button"
-                className="companion-action"
-                onClick={() => onCite(example.id)}
-                title="Add a link to it in the document"
-              >
-                Cite
-              </button>
-              <button
-                type="button"
-                className="companion-action companion-action--danger"
-                onClick={() => onCut(example.id)}
-                title="Drop it from the gallery"
-              >
-                Cut
-              </button>
-            </div>
-          </div>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
 /**
  * Adds a citation to the end of a section, spaced like markdown rather than
  * jammed against whatever was there.
  *
  * A bullet needs a blank line before it unless it is joining a list already,
- * and `replaceSection` takes the section verbatim — so the blank line that
- * separated this section from the next has to be put back, or the following
- * heading ends up welded to the citation.
+ * and `replaceSection` takes the section verbatim — so the separator has to be
+ * put here or the citation runs into the paragraph above it.
  */
 function citeInto(sectionText: string, line: string): string {
   const body = sectionText.replace(/\s+$/, "").split("\n");
   const last = body[body.length - 1] ?? "";
   if (!/^\s*[-*+]\s/.test(last)) body.push("");
   body.push(line);
-  return `${body.join("\n")}\n\n`;
+  return `${body.join("\n")}\n`;
 }
 
 function hostOf(url: string): string {
@@ -508,3 +433,128 @@ function hostOf(url: string): string {
     return url;
   }
 }
+
+/* ── Media sidebar ────────────────────────────────────────────────────────
+   Every screenshot the agent found, beside the words that cite them.
+
+   Thumbnails rather than a grid of cards: this column is a reference strip you
+   glance at while reading, and the full picture is one click away. Cite is on
+   the thumbnail because citing while reading is the whole point of having them
+   here rather than behind a tab. */
+
+interface MediaSidebarProps {
+  examples: Example[];
+  imageUrl: (image: string) => string;
+  onOpen: (id: string) => void;
+  onCite: (id: string) => void;
+  onFind: () => void;
+  busy: boolean;
+}
+
+function MediaSidebar({ examples, imageUrl, onOpen, onCite, onFind, busy }: MediaSidebarProps) {
+  return (
+    <aside className="companion-media" aria-label="Examples">
+      <div className="companion-media-head">
+        <span className="companion-media-title">Examples</span>
+        <button type="button" className="companion-action" onClick={onFind} disabled={busy}>
+          Find more
+        </button>
+      </div>
+
+      <ul className="companion-media-list">
+        {examples.map((example) => (
+          <li key={example.id} className="companion-thumb">
+            <button
+              type="button"
+              className="companion-thumb-shot"
+              onClick={() => onOpen(example.id)}
+              title={example.note || example.title}
+            >
+              {/* Not lazy. This is a reference strip of a few small shots that
+                  should be there the moment the drawer is, and a deferred
+                  thumbnail is an empty box exactly when you are looking for
+                  the picture it holds. */}
+              <img src={imageUrl(example.image)} alt={example.title} />
+            </button>
+            <span className="companion-thumb-title">{example.title}</span>
+            <div className="companion-thumb-actions">
+              <button
+                type="button"
+                className="companion-action"
+                onClick={() => onCite(example.id)}
+                title="Link to it from the section you are reading"
+              >
+                Cite
+              </button>
+              {example.source ? null : (
+                /* A screenshot with no provenance is a picture, not evidence. */
+                <span className="companion-example-nosource">no source</span>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </aside>
+  );
+}
+
+/* ── Lightbox ─────────────────────────────────────────────────────────────
+   The thumbnail is for finding it; this is for actually looking at it. */
+
+interface LightboxProps {
+  example: Example;
+  imageUrl: (image: string) => string;
+  onClose: () => void;
+  onCite: (id: string) => void;
+  onCut: (id: string) => void;
+}
+
+function Lightbox({ example, imageUrl, onClose, onCite, onCut }: LightboxProps) {
+  return (
+    <div className="companion-lightbox" onMouseDown={onClose}>
+      <figure
+        className="companion-lightbox-figure"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <img src={imageUrl(example.image)} alt={example.title} />
+        <figcaption className="companion-lightbox-caption">
+          <span className="companion-example-title">{example.title}</span>
+          {example.note ? (
+            <span className="companion-example-note">{example.note}</span>
+          ) : null}
+          {example.source ? (
+            <a
+              className="companion-example-source"
+              href={example.source}
+              target="_blank"
+              rel="noreferrer noopener"
+            >
+              {hostOf(example.source)}
+            </a>
+          ) : (
+            <span className="companion-example-nosource">no source</span>
+          )}
+          <div className="companion-example-actions">
+            <button type="button" className="companion-action" onClick={() => onCite(example.id)}>
+              Cite
+            </button>
+            <button
+              type="button"
+              className="companion-action companion-action--danger"
+              onClick={() => {
+                onCut(example.id);
+                onClose();
+              }}
+            >
+              Cut
+            </button>
+            <button type="button" className="companion-action" onClick={onClose}>
+              Close
+            </button>
+          </div>
+        </figcaption>
+      </figure>
+    </div>
+  );
+}
+

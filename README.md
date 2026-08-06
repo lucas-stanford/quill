@@ -142,10 +142,12 @@ pass, then go out over the same agent bridge as **Update with AI** (see `AGENT-B
 answer lands, **Undo the re-run** puts the document back exactly as it was.
 
 There is also **Find examples**. Some of a design is learned by reading and some of it only
-by looking, so you can ask for screenshots of how comparable products did something — and
-they come back as a gallery beside the document, each with its source and a line on what it
-shows. **Cite** one and a markdown link lands in the section you are reading; the picture
-stays out of the plan, because the schema has no image node on purpose.
+by looking, so you can ask for screenshots of how comparable products did something. They
+arrive in a **sidebar beside the document** rather than behind a tab — the pictures are the
+evidence for what the words claim, so you want them in view while you read. Click one for
+the full image and its source; **Cite** puts a markdown link in the section you are reading
+without leaving it. The picture stays out of the document, because the schema has no image
+node on purpose.
 
 You can also just type in it: companions autosave, and a write is refused if the agent
 changed the file underneath you rather than clobbering whichever side raced slower.
