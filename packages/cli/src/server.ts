@@ -9,6 +9,7 @@ import type {
   CompanionDocument,
   CompanionList,
   ExamplesResponse,
+  OptionsResponse,
   ConflictResponse,
   ErrorResponse,
   PlanResponse,
@@ -23,6 +24,7 @@ import { hashContent } from "./hash.js";
 import { writeFileAtomic } from "./atomic.js";
 import { resolveStaticPath } from "./static-path.js";
 import { listCompanions, readCompanion, writeCompanion } from "./companions.js";
+import { parseOptions, readOptions, writeOptions } from "./options.js";
 import {
   mediaExists,
   mediaTypeFor,
@@ -66,6 +68,11 @@ interface AnnotationsConflictResponse extends ErrorResponse {
   current: AnnotationsResponse;
 }
 
+/** 409 for PUT /api/options — carries what is actually on disk. */
+interface OptionsConflictResponse extends ErrorResponse {
+  current: OptionsResponse;
+}
+
 /** 409 for PUT /api/examples — carries what is actually on disk. */
 interface ExamplesConflictResponse extends ErrorResponse {
   current: ExamplesResponse;
@@ -88,6 +95,8 @@ type JsonBody =
   | CompanionDocument
   | ExamplesResponse
   | ExamplesConflictResponse
+  | OptionsResponse
+  | OptionsConflictResponse
   | TicketPlan
   | ReviewSummary;
 
@@ -326,6 +335,46 @@ async function handleApiPlanPut(
     revision: newHash,
   };
   sendJson(res, 200, body);
+}
+
+/** PUT /api/options — picks and drops, guarded like every other write. */
+async function handleApiOptionsPut(
+  planPath: string,
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> {
+  let rawBody: string;
+  try {
+    rawBody = await readBody(req);
+  } catch {
+    sendJson(res, 400, { error: "Request body too large" });
+    return;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawBody);
+  } catch {
+    sendJson(res, 400, { error: "Invalid JSON body" });
+    return;
+  }
+
+  const raw = parsed as Record<string, unknown> | null;
+  if (!raw || typeof raw !== "object" || typeof raw.revision !== "string") {
+    sendJson(res, 400, { error: "body.revision must be a string" });
+    return;
+  }
+
+  const result = await writeOptions(planPath, parseOptions(raw.manifest), raw.revision);
+  if (result.ok) {
+    sendJson(res, 200, result.state);
+    return;
+  }
+  if (result.status === 409 && result.current) {
+    sendJson(res, 409, { error: result.error, current: result.current });
+    return;
+  }
+  sendJson(res, result.status, { error: result.error } satisfies ErrorResponse);
 }
 
 /** PUT /api/examples — keep/cut decisions, guarded like every other write. */
@@ -902,6 +951,18 @@ function createHandler(
         await handleApiPlanGet(planPath, res);
       } else if (method === "PUT") {
         await handleApiPlanPut(planPath, req, res, state);
+      } else {
+        res.writeHead(405, { "Content-Type": "text/plain", Allow: "GET, PUT" });
+        res.end("Method Not Allowed");
+      }
+      return;
+    }
+
+    if (pathname === "/api/options") {
+      if (method === "GET") {
+        sendJson(res, 200, await readOptions(planPath));
+      } else if (method === "PUT") {
+        await handleApiOptionsPut(planPath, req, res);
       } else {
         res.writeHead(405, { "Content-Type": "text/plain", Allow: "GET, PUT" });
         res.end("Method Not Allowed");

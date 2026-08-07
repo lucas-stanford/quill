@@ -211,7 +211,7 @@ export type RevisionRequestResult =
   | { ok: true; brief: RevisionBrief; prompt: string; target: RevisionTarget; scope?: RevisionScope }
   | { ok: false; reason: string };
 
-const SCOPE_KINDS = new Set(["redo", "deepen", "add", "examples"]);
+const SCOPE_KINDS = new Set(["redo", "deepen", "add", "examples", "options"]);
 const SCOPE_MODES = new Set(["replace", "append"]);
 
 /**
@@ -234,7 +234,7 @@ function readScope(value: unknown, where: string): RevisionScope {
   const raw = requireRecord(value, where);
   const kind = requireString(raw.kind, `${where}.kind`);
   if (!SCOPE_KINDS.has(kind)) {
-    fail(`${where}.kind must be "redo", "deepen", "add" or "examples"`);
+    fail(`${where}.kind must be one of redo, deepen, add, examples, options`);
   }
   const mode = requireString(raw.mode, `${where}.mode`);
   if (!SCOPE_MODES.has(mode)) fail(`${where}.mode must be "replace" or "append"`);

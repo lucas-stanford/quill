@@ -5,6 +5,7 @@ import type {
   ConflictResponse,
   PlanResponse,
   ExamplesResponse,
+  OptionsResponse,
   RevisionBrief,
   RevisionScope,
   RevisionState,
@@ -241,4 +242,31 @@ export async function saveExamples(
 /** Where an example's picture is served from. */
 export function exampleImageUrl(image: string): string {
   return `/api/examples/media/${encodeURIComponent(image)}`;
+}
+
+/* ── Options ─────────────────────────────────────────────────────────────
+   Candidate names. Quill reads them and records the decisions; the agent is
+   what actually comes up with them. */
+
+export async function fetchOptions(): Promise<OptionsResponse> {
+  const res = await fetch("/api/options");
+  if (!res.ok) throw new Error(await errorMessage(res, `Failed to load options (${res.status})`));
+  return (await res.json()) as OptionsResponse;
+}
+
+export async function saveOptions(
+  manifest: OptionsResponse["manifest"],
+  revision: string,
+): Promise<OptionsResponse> {
+  const res = await fetch("/api/options", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ manifest, revision }),
+  });
+  if (res.status === 409) {
+    const body = (await res.json()) as { current: OptionsResponse };
+    return body.current;
+  }
+  if (!res.ok) throw new Error(await errorMessage(res, `Failed to save options (${res.status})`));
+  return (await res.json()) as OptionsResponse;
 }

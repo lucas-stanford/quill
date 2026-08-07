@@ -120,6 +120,17 @@ The default. Quill runs `copilot -p <prompt>` itself, spawned with an argument a
 than a shell string. The model's output is **never written to your plan** — it returns to
 the browser as tracked changes, so a bad rewrite is one click from being undone.
 
+## Naming
+
+**Names** in the title bar asks the agent for candidates — eight to twelve, each with a line
+on why it works — and shows them as a poll. Steer it if you already know what you want
+("one word, weird west, no compound words"), pick one, and **Use as title** rewrites the
+document's `# H1` and nothing else.
+
+Rounds accumulate rather than replace: what you dropped is listed back to the agent so the
+next round cannot offer it again, and the steering that produced each round stays with it.
+Candidates live in `research/options.json`.
+
 ## Companion documents
 
 A plan is an argument, and an argument is only reviewable next to its evidence. If a
@@ -187,6 +198,7 @@ The handoff is optional. A missing `fer` is reported, never fatal.
 | `PLAN.quill.json` | comments and threads (anchored by quoted text), plus your feedback notes |
 | `research.md`, `reference.md` | optional companions — read-only tabs beside the plan |
 | `research/examples.json` | the examples gallery — screenshots and their sources |
+| `research/options.json` | candidate names, round by round |
 | `.quill/` | transient revision request/response, attached mode only |
 
 Comments are anchored by the text they quote plus surrounding context, never by offsets, so
@@ -199,7 +211,7 @@ sentence.
 ```bash
 pnpm install
 pnpm build          # web bundle, then the CLI that embeds it
-pnpm test           # 532 tests
+pnpm test           # 550 tests
 pnpm typecheck
 ```
 

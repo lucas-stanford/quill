@@ -197,6 +197,43 @@ export interface ExamplesResponse {
   revision: string;
 }
 
+/* ── Options ──────────────────────────────────────────────────────────────
+   Candidate names, kept as rounds: the ones rejected are as useful as the one
+   taken, because the next round should not offer them again. */
+
+export interface NameOption {
+  id: string;
+  /** The candidate itself. */
+  value: string;
+  /** Why the agent offered it. */
+  note: string;
+  /** Ruled out. Kept, so a later round does not suggest it again. */
+  dropped: boolean;
+}
+
+export interface OptionPoll {
+  id: string;
+  /** What is being named — "name" unless something else was asked for. */
+  subject: string;
+  /** What the reviewer asked for, if anything. */
+  steering: string;
+  createdAt: string;
+  options: NameOption[];
+  /** The id of the option that won, when one has. */
+  chosen?: string;
+}
+
+export interface OptionsManifest {
+  version: 1;
+  polls: OptionPoll[];
+}
+
+/** GET/PUT /api/options */
+export interface OptionsResponse {
+  manifest: OptionsManifest;
+  revision: string;
+}
+
 /** GET /api/companions/:name */
 export interface CompanionDocument extends CompanionSummary {
   markdown: string;
@@ -249,7 +286,7 @@ export interface RevisionScope {
   document: string;
   heading: string;
   text: string;
-  kind: "redo" | "deepen" | "add" | "examples";
+  kind: "redo" | "deepen" | "add" | "examples" | "options";
   mode: "replace" | "append";
   note?: string;
 }

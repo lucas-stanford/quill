@@ -14,6 +14,7 @@ import {
   ReconcileBanner,
 } from "./companions";
 import { FeedbackRail } from "./feedback";
+import { useOptions, OptionsPanel, retitle } from "./options";
 import { ConflictError, fetchPlan, savePlan } from "./api";
 import type { LoadStatus, PlanResponse, SaveState } from "./types";
 
@@ -132,6 +133,9 @@ export default function App() {
    * landed and the reviewer has finished with it — cheap, and exactly when the
    * research is most likely to have moved.
    */
+  const options = useOptions(status === "ready");
+  const [namesOpen, setNamesOpen] = useState(false);
+
   const reconcile = useReconcile({
     enabled: status === "ready",
     companions: companions.available,
@@ -191,9 +195,48 @@ export default function App() {
       tracking={status === "ready" ? tracking : undefined}
       approveButton={status === "ready" ? <ApproveButton approve={approve} /> : null}
       companionTabs={
-        status === "ready" ? <CompanionTabs companions={companions} /> : null
+        status === "ready" ? (
+          <>
+            <CompanionTabs companions={companions} />
+            <button
+              type="button"
+              className="companion-tab"
+              onClick={() => setNamesOpen(true)}
+              title="Ask for candidate names"
+            >
+              Names
+            </button>
+          </>
+        ) : null
       }
-      companionDrawer={<CompanionDrawer companions={companions} />}
+      companionDrawer={
+        <>
+          <CompanionDrawer companions={companions} />
+          <OptionsPanel
+            options={options}
+            open={namesOpen}
+            onClose={() => setNamesOpen(false)}
+            onUse={(value) => {
+              /*
+               * Taking a name rewrites the document's own title, which is the
+               * only place a plan states what it is called. It goes through
+               * the editor's normal change path, so it autosaves and is undoable
+               * like anything else the reviewer typed.
+               */
+              const current = pendingRef.current ?? doc?.markdown ?? "";
+              const next = retitle(current, value);
+              if (next !== current) {
+                // Through the load path, not the editor's API: `usePlanEditor`
+                // owns replacing content and keeps the source map in step, so
+                // untouched blocks still round-trip byte-identically.
+                setDoc((prev) => (prev ? { ...prev, markdown: next } : prev));
+                handleChange(next);
+              }
+              setNamesOpen(false);
+            }}
+          />
+        </>
+      }
       banner={
         <ReconcileBanner
           stale={reconcile.stale}

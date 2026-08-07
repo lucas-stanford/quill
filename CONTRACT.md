@@ -31,6 +31,7 @@ GET      /api/companions      research.md / reference.md
 GET/PUT  /api/companions/:name  editable; PUT is revision-guarded
 GET/PUT  /api/examples        the screenshot gallery's manifest
 GET      /api/examples/media/:file
+GET/PUT  /api/options         candidate names, round by round
 GET/PUT  /api/plan            M1/M2
 GET      /api/live            M2 (SSE)
 GET/PUT  /api/annotations     M3
@@ -87,7 +88,7 @@ Frozen signatures are in `approve/useApprove.ts` and `approve/ApproveButton.tsx`
 pnpm install
 pnpm typecheck && pnpm build && pnpm test
 ```
-**532 tests pass at head** (202 CLI via node:test, 330 web via vitest). Do not regress them.
+**550 tests pass at head** (211 CLI via node:test, 339 web via vitest). Do not regress them.
 
 ## Definition of done for your lane
 

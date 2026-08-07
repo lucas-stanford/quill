@@ -195,7 +195,7 @@ When `target` is `"research"`:
 | `scope.document` | the file to edit, always beside the plan |
 | `scope.heading` | the section's heading, verbatim |
 | `scope.text` | that section exactly as it stands right now |
-| `scope.kind` | `redo` (it is unreliable, go again), `deepen` (keep it, go further), `add` (a new line of enquiry), `examples` (go and find pictures — see below) |
+| `scope.kind` | `redo` (it is unreliable, go again), `deepen` (keep it, go further), `add` (a new line of enquiry), `examples` (go and find pictures), `options` (candidate names) — the last two are described below |
 | `scope.mode` | `replace` that section, or `append` your answer after it as a further pass |
 | `scope.note` | the reviewer's own words, when they gave any |
 
@@ -244,6 +244,40 @@ not replacing one. Every example carries its `source`; a screenshot with no
 source is a picture, not evidence, and Quill labels it as such. Then answer
 `done` as usual. Quill re-reads the manifest and serves the images to its own
 page; it never fetches anything itself.
+
+### `kind: "options"` — candidate names
+
+Naming is the decision people most want alternatives for. `scope.heading` says
+what is being named ("name" unless something else was asked for) and
+`scope.note` is the steering, when there was any.
+
+Append a NEW poll to `research/options.json`, **keeping every poll already
+there** — the rounds are the argument, not just the answer, and the candidates
+already offered are listed in the prompt so you do not repeat them.
+
+```json
+{
+  "version": 1,
+  "polls": [
+    {
+      "id": "…",
+      "subject": "name",
+      "steering": "one word, weird west",
+      "createdAt": "2026-08-06T00:00:00.000Z",
+      "options": [
+        { "id": "…", "value": "Palaver",
+          "note": "Period word for a parley.", "dropped": false }
+      ]
+    }
+  ]
+}
+```
+
+Eight to twelve candidates, each with a `note` saying why it works — a name
+with no argument behind it cannot be weighed against one that has. **Do not set
+`chosen`.** Picking is the reviewer's job, and an agent that picks has taken the
+decision the poll exists to leave open. Touch nothing else: not the plan, not
+the research.
 
 ## 5. Timeouts and cancellation
 
