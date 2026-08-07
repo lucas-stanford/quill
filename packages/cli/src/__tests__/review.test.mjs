@@ -174,3 +174,47 @@ describe("exit codes", () => {
     assert.ok(![EXIT_APPROVED, EXIT_CANCELLED, EXIT_ERRORED].includes(1));
   });
 });
+
+describe("what review debris costs, measured", () => {
+  /*
+   * These pin the claims the approve dialog's verification pass makes to the
+   * reviewer. A warning whose stated reason is false is worse than no warning,
+   * so the words there are checked against what the shatter actually does.
+   */
+  test("makes no ticket at all from an empty list item", () => {
+    const tickets = planToTickets("# Plan\n\n## M1\n\n1. A real step.\n2.\n-\n3. Another step.\n");
+
+    assert.deepEqual(
+      tickets.map((t) => t.title),
+      ["M1", "A real step.", "Another step."],
+    );
+  });
+
+  test("skips an empty heading and hands its steps to the milestone above", () => {
+    // The serious one: the work does not vanish, it silently lands under the
+    // wrong heading, which is far harder to notice than a missing ticket.
+    const tickets = planToTickets(
+      "# Plan\n\n## M1 — Ride in\n\n1. A real step.\n\n##\n\n1. Orphaned step.\n",
+    );
+
+    assert.deepEqual(
+      tickets.map((t) => [t.title, t.parent]),
+      [
+        ["M1 — Ride in", undefined],
+        ["A real step.", 0],
+        ["Orphaned step.", 0],
+      ],
+    );
+  });
+
+  test("loses every heading below an unclosed fence", () => {
+    const tickets = planToTickets(
+      "# Plan\n\n## M1\n\n1. A real step.\n\n```sh\nquill PLAN.md\n\n## M2\n\n1. Never becomes work.\n",
+    );
+
+    assert.deepEqual(
+      tickets.map((t) => t.title),
+      ["M1", "A real step."],
+    );
+  });
+});

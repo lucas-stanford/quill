@@ -77,7 +77,12 @@ Frozen signatures are in `approve/useApprove.ts` and `approve/ApproveButton.tsx`
    the document. There is no longer a mode gating it — the caret is the only signal — so
    showing it more eagerly is a regression.
 6. **Nothing may move the page.** The ribbon and review bar animate `transform` only.
-7. **A file's own doc comment goes at the top, above the imports.** It is what the
+7. **Accepting a deletion must leave no husk.** Emptying a `listItem > paragraph` and
+   stopping there gets the empty node refilled by the schema, which is a blank bullet in a
+   document about to be approved and shattered into a board. The deletion climbs to the
+   outermost ancestor the block is the only child of. This shipped broken for every list
+   deletion; do not regress it.
+8. **A file's own doc comment goes at the top, above the imports.** It is what the
    file is for, and a reader looking for that should not have to scroll past a
    dependency list to find it. Comments about a specific declaration stay with
    the declaration.
@@ -88,7 +93,7 @@ Frozen signatures are in `approve/useApprove.ts` and `approve/ApproveButton.tsx`
 pnpm install
 pnpm typecheck && pnpm build && pnpm test
 ```
-**614 tests pass at head** (227 CLI via node:test, 387 web via vitest). Do not regress them.
+**653 tests pass at head** (230 CLI via node:test, 423 web via vitest). Do not regress them.
 
 ## Definition of done for your lane
 

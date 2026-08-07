@@ -330,11 +330,42 @@ function marksAt(doc: ProseMirrorNode, pos: number): readonly Mark[] {
 }
 
 /**
+ * The range to delete so that emptying a textblock does not leave a husk.
+ *
+ * Deleting a step's words leaves `listItem > paragraph` with nothing in it. The
+ * paragraph is invalid empty, so ProseMirror obligingly puts an empty one back
+ * — and the reviewer gets a bullet with no text, in a document they are about
+ * to approve. Removing the paragraph alone is no better: it empties the
+ * `listItem` instead and the schema refills that the same way.
+ *
+ * So the deletion climbs to the outermost ancestor that this block is the only
+ * child of, and takes the lot. An emptied step is not a step; an emptied list
+ * is not a list.
+ *
+ * There is deliberately no guard against emptying the document: measured, the
+ * schema's `block+` makes ProseMirror put a fresh paragraph back either way, so
+ * a guard here would be a line no drill could ever turn red.
+ *
+ * Returns `null` when the range is not a whole textblock.
+ */
+function huskRange(doc: ProseMirrorNode, from: number, to: number): Interval | null {
+  const resolved = doc.resolve(clamp(from, doc));
+  if (!resolved.parent.isTextblock) return null;
+  if (from !== resolved.start() || to !== resolved.end()) return null;
+
+  let depth = resolved.depth;
+  // Climb while this node is all its parent holds.
+  while (depth > 1 && resolved.node(depth - 1).childCount === 1) depth -= 1;
+
+  return { from: resolved.before(depth), to: resolved.after(depth) };
+}
+
+/**
  * Remove a tracked range for real.
  *
  * `dropEmptyBlock` is used when accepting a deletion that covers a whole
  * paragraph: taking only the text would leave an empty block behind, which is a
- * blank line the reviewer never asked to keep.
+ * blank line — or a blank bullet — the reviewer never asked to keep.
  *
  * A range is never allowed to delete ACROSS a block boundary. In ProseMirror
  * `delete(from, to)` spanning two textblocks joins them, so accepting one hunk
@@ -359,15 +390,9 @@ function deleteRange(
    */
   if (pieces === null) {
     if (dropEmptyBlock) {
-      const resolved = tr.doc.resolve(clamp(range.from, tr.doc));
-      const wholeBlock =
-        resolved.depth === 1 &&
-        resolved.parent.isTextblock &&
-        range.from === resolved.start() &&
-        range.to === resolved.end() &&
-        tr.doc.childCount > 1;
-      if (wholeBlock) {
-        tr.delete(resolved.before(), resolved.after());
+      const husk = huskRange(tr.doc, range.from, range.to);
+      if (husk) {
+        tr.delete(husk.from, husk.to);
         return;
       }
     }
@@ -382,13 +407,8 @@ function deleteRange(
    * the list.
    */
   for (const piece of pieces) {
-    const resolved = tr.doc.resolve(clamp(piece.from, tr.doc));
-    const emptied =
-      resolved.parent.isTextblock &&
-      piece.from === resolved.start() &&
-      piece.to === resolved.end() &&
-      (resolved.depth > 1 || tr.doc.childCount > 1);
-    if (emptied) tr.delete(resolved.before(), resolved.after());
+    const husk = huskRange(tr.doc, piece.from, piece.to);
+    if (husk) tr.delete(husk.from, husk.to);
     else tr.delete(piece.from, piece.to);
   }
 }

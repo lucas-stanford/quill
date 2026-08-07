@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { ApproveApi } from "./useApprove";
+import { describeFindings } from "./verify";
+
+/** Enough to see the shape of the problem without becoming a report. */
+const MAX_SHOWN = 6;
 import { shapeOf } from "./outcome";
 import "./approve.css";
 
@@ -15,13 +19,16 @@ export function ApproveButton({ approve }: ApproveButtonProps) {
   const returnFocus = useRef<HTMLElement | null>(null);
   const titleId = useId();
 
-  const { loadTicketPlan, summary } = approve;
+  const { loadTicketPlan, summary, verify } = approve;
 
   const openDialog = useCallback(() => {
     returnFocus.current = document.activeElement as HTMLElement | null;
     setOpen(true);
     loadTicketPlan();
-  }, [loadTicketPlan]);
+    // The last look at the document, taken at the moment finishing is asked
+    // for — so it is about the text that will actually be written.
+    verify();
+  }, [loadTicketPlan, verify]);
 
   const close = useCallback(() => {
     setOpen(false);
@@ -60,7 +67,8 @@ export function ApproveButton({ approve }: ApproveButtonProps) {
 
   if (summary) return <ReviewEnded summary={summary} />;
 
-  const { openComments, pendingChanges, ticketPlan, busy } = approve;
+  const { openComments, pendingChanges, ticketPlan, busy, findings } = approve;
+  const fixable = findings.filter((finding) => finding.fixable).length;
   const leaving = openComments + pendingChanges;
   const { epics, tasks } = shapeOf(ticketPlan);
 
@@ -102,6 +110,41 @@ export function ApproveButton({ approve }: ApproveButtonProps) {
               </p>
             ) : (
               <p className="approve-clean">Nothing is left unresolved.</p>
+            )}
+
+            {findings.length > 0 && (
+              /*
+               * The last look before the one irreversible step. Debris that
+               * survives to here becomes an empty ticket or, for a fence
+               * nobody closed, swallows every milestone under it — so it is
+               * shown as the document's own lines, with the line numbers, and
+               * the reviewer decides.
+               */
+              <div className="approve-verify" role="group" aria-label="Problems found">
+                <p className="approve-verify-head">{describeFindings(findings)}</p>
+                <ul className="approve-verify-list">
+                  {findings.slice(0, MAX_SHOWN).map((finding) => (
+                    <li
+                      key={`${finding.kind}:${finding.line}`}
+                      className="approve-verify-item"
+                      data-fixable={finding.fixable || undefined}
+                    >
+                      <span className="approve-verify-line">line {finding.line}</span>
+                      <span className="approve-verify-message">{finding.message}</span>
+                    </li>
+                  ))}
+                </ul>
+                {findings.length > MAX_SHOWN && (
+                  <p className="approve-verify-more">
+                    and {findings.length - MAX_SHOWN} more
+                  </p>
+                )}
+                {fixable > 0 && (
+                  <button type="button" className="approve-verify-fix" onClick={approve.clean}>
+                    Clear {fixable === findings.length ? "them" : `the ${fixable} clearable`} for me
+                  </button>
+                )}
+              </div>
             )}
 
             <label className="approve-tickets">

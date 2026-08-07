@@ -120,6 +120,12 @@ export default function App() {
     [flush],
   );
 
+  /** The plan including edits not yet flushed to disk. */
+  const readMarkdown = useCallback(
+    () => pendingRef.current ?? doc?.markdown ?? "",
+    [doc],
+  );
+
   const editor = usePlanEditor({
     markdown: doc?.markdown ?? "",
     onChange: handleChange,
@@ -140,7 +146,18 @@ export default function App() {
     tracking,
   });
 
-  const approve = useApprove({ enabled: status === "ready", annotations, tracking });
+  const approve = useApprove({
+    enabled: status === "ready",
+    annotations,
+    tracking,
+    getMarkdown: readMarkdown,
+    onClean: (next) => {
+      // The reviewer's own edit: autosaved, and ⌘Z takes it back.
+      setDocUndoable(true);
+      setDoc((prev) => (prev ? { ...prev, markdown: next } : prev));
+      handleChange(next);
+    },
+  });
 
   const companions = useCompanions(status === "ready");
 

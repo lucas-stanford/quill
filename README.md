@@ -28,7 +28,12 @@ quill PLAN.md          # opens the plan in your browser, blocks until you are do
    it is doing, each note closes as it is dealt with rather than all at once at the end, and
    a plan it sends mid-flight lands as tracked changes straight away. It is never timed out
    while it is talking. Reopen any note you disagree with.
-6. Press **Approve**. The CLI exits, optionally turning the plan into a ticket board first.
+6. Press **Approve**. A verification pass reads the document first and reports anything the
+   review left behind — an empty bullet where a step was deleted, a heading with no words, a
+   code fence nobody closed. None of it blocks you, and the ones needing no judgement can be
+   cleared in one click. It is checked here because approving is the irreversible step: what
+   is on disk becomes the board.
+7. The CLI exits, optionally turning the plan into a ticket board first.
 
 Anything that changes the document can be taken back with **⌘Z / Ctrl+Z**, from wherever the
 focus happens to be — the replacements worth undoing are made from controls outside the page.
@@ -223,7 +228,7 @@ sentence.
 ```bash
 pnpm install
 pnpm build          # web bundle, then the CLI that embeds it
-pnpm test           # 614 tests
+pnpm test           # 653 tests
 pnpm typecheck
 ```
 

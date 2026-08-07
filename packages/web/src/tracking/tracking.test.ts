@@ -351,6 +351,14 @@ describe("recording edits", () => {
   });
 });
 
+/** Land a revision and take all of it, the way Accept all does. */
+function accepted(before: string, after: string): string {
+  const h = harness(before);
+  h.dispatch(buildRevisionTransaction(h.state, after));
+  h.dispatch(buildAcceptTransaction(h.state, idsOf(h)));
+  return h.markdown();
+}
+
 describe("applyRevision — list items stay separate steps", () => {
   const STEPS = `# Plan
 
@@ -581,5 +589,96 @@ describe("applyRevision", () => {
     expect(h.changes()).toEqual(mine);
     expect(h.state.doc.textContent).toContain("XYZ");
     expect(h.state.doc.textContent).toContain("terminal is bad");
+  });
+});
+
+describe("accepting a deletion leaves no husk", () => {
+  /**
+   * The bug this is here to keep dead.
+   *
+   * Deleting a step's words emptied `listItem > paragraph`. An empty paragraph
+   * is invalid, so ProseMirror obligingly put one back — and the reviewer got a
+   * bullet with no text in a document they were about to approve. It happened
+   * for EVERY list deletion, ordered and bulleted alike, and the test that
+   * covered the case only asserted the deleted words were gone, so it stayed
+   * green throughout.
+   */
+  const ORDERED = `# Plan
+
+## M1
+
+1. Alpha step.
+2. Bravo step.
+3. Charlie step.
+
+Tail paragraph.
+`;
+
+  const BULLETS = ORDERED.replace(/^\d+\. /gm, "- ").replace(/step\./g, "item.");
+
+  /** An empty bullet or numbered item, however it is spelled. */
+  const EMPTY_ITEM = /^[ \t]*(?:[-*+]|\d+\.)[ \t]*$/m;
+
+  const drop = (plan: string, line: string) => plan.replace(`${line}\n`, "");
+
+  for (const [name, plan] of [
+    ["ordered", ORDERED],
+    ["bulleted", BULLETS],
+  ] as const) {
+    const items = plan
+      .split("\n")
+      .filter((line) => /^(?:[-*+]|\d+\.) \S/.test(line));
+
+    for (const [at, item] of items.entries()) {
+      it(`${name}: dropping item ${at + 1} leaves no empty item`, () => {
+        const out = accepted(plan, drop(plan, item));
+
+        expect(out).not.toMatch(EMPTY_ITEM);
+        expect(out).not.toContain(item.replace(/^(?:[-*+]|\d+\.) /, ""));
+        // The others survive, whole and still separate.
+        for (const other of items.filter((o) => o !== item)) {
+          expect(out).toContain(other.replace(/^(?:[-*+]|\d+\.) /, ""));
+        }
+        expect(out).toContain("Tail paragraph.");
+      });
+    }
+
+    it(`${name}: dropping every item takes the list with it`, () => {
+      // An emptied step is not a step, and an emptied list is not a list.
+      let revised = plan;
+      for (const item of items) revised = drop(revised, item);
+      const out = accepted(plan, revised);
+
+      expect(out).not.toMatch(EMPTY_ITEM);
+      expect(out).toContain("## M1");
+      expect(out).toContain("Tail paragraph.");
+    });
+
+    it(`${name}: dropping all but one keeps that one`, () => {
+      let revised = plan;
+      for (const item of items.slice(0, -1)) revised = drop(revised, item);
+      const out = accepted(plan, revised);
+
+      expect(out).not.toMatch(EMPTY_ITEM);
+      expect(out).toContain(items[items.length - 1]!.replace(/^(?:[-*+]|\d+\.) /, ""));
+    });
+  }
+
+  it("empties a lone paragraph's text without deleting the document", () => {
+    // Climbing all the way up would leave a document with no nodes in it, which
+    // cannot be edited — the reviewer still needs somewhere to type.
+    const out = accepted("Only this.\n", "\n");
+
+    expect(out.trim()).toBe("");
+  });
+
+  it("still deletes a whole top-level paragraph", () => {
+    const plan = "# Plan\n\nFirst para.\n\nSecond para.\n";
+    const out = accepted(plan, "# Plan\n\nSecond para.\n");
+
+    expect(out).not.toContain("First para.");
+    expect(out).toContain("Second para.");
+    // The husk here is a blank line nobody asked to keep.
+    expect(out).not.toMatch(/\n\n\n/);
   });
 });
