@@ -282,6 +282,52 @@ describe("RevisionManager — attached mode", () => {
     assert.equal((await settled(manager)).status, "done");
   });
 
+  it("carries what the agent reports while it is still working", async () => {
+    const { dir, planPath } = await workspace("attached-progress");
+    const manager = attached(planPath, { timeoutMs: 2000 });
+    const started = await manager.start(brief(), PROMPT);
+    const id = started.state.id;
+
+    await respond(dir, { id, status: "working", note: "Rewriting milestone 2", resolved: ["c1"] });
+    await waitFor(() => manager.getState().progress?.seq === 1, { what: "the first report" });
+
+    let state = manager.getState();
+    assert.equal(state.progress.note, "Rewriting milestone 2");
+    assert.deepEqual(state.progress.resolved, ["c1"]);
+
+    // An agent that resends its whole list every beat is the easy thing to
+    // write, and must not be punished with duplicates.
+    await respond(dir, { id, status: "working", resolved: ["c1", "c2"] });
+    await waitFor(() => manager.getState().progress?.seq === 2, { what: "the second report" });
+
+    state = manager.getState();
+    assert.deepEqual(state.progress.resolved, ["c1", "c2"]);
+    // Sticky: a beat that only ships ids must not blank the commentary.
+    assert.equal(state.progress.note, "Rewriting milestone 2");
+
+    await respond(dir, { id, status: "working", markdown: "# Half\n" });
+    await waitFor(() => manager.getState().progress?.seq === 3, { what: "the snapshot" });
+    assert.equal(manager.getState().progress.markdown, "# Half\n");
+
+    await respond(dir, { id, status: "done", markdown: "# Done\n" });
+    const final = await settled(manager);
+    assert.equal(final.status, "done");
+    assert.equal(final.markdown, "# Done\n");
+    // What it said along the way travels with the result, so the browser can
+    // close exactly what was dealt with even if the last reply did not repeat it.
+    assert.deepEqual(final.progress.resolved, ["c1", "c2"]);
+  });
+
+  it("reports no progress at all until the agent says something", async () => {
+    // A `progress` that exists from the start would make "has it begun?"
+    // unanswerable, and the browser resolves comments off the back of it.
+    const { planPath } = await workspace("attached-no-progress");
+    const manager = attached(planPath, { timeoutMs: 2000 });
+    await manager.start(brief(), PROMPT);
+
+    assert.equal(manager.getState().progress, undefined);
+  });
+
   it("ignores a response for a revision that is not in flight", async () => {
     const { dir, planPath } = await workspace("attached-stale-id");
     const manager = attached(planPath);

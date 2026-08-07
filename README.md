@@ -24,9 +24,15 @@ quill PLAN.md          # opens the plan in your browser, blocks until you are do
    objections stay two notes and the agent has to answer both.
 5. Press **Update with AI**. Your comments, edits and feedback become a brief, the agent
    rewrites the plan, and the rewrite comes back as **tracked changes** — accept or reject
-   each one. The comments and feedback notes it was asked to act on are resolved for you,
-   so what is still outstanding is whatever is still open; reopen any you disagree with.
+   each one. An agent that reports its progress is watched live: the status pill says what
+   it is doing, each note closes as it is dealt with rather than all at once at the end, and
+   a plan it sends mid-flight lands as tracked changes straight away. It is never timed out
+   while it is talking. Reopen any note you disagree with.
 6. Press **Approve**. The CLI exits, optionally turning the plan into a ticket board first.
+
+Anything that changes the document can be taken back with **⌘Z / Ctrl+Z**, from wherever the
+focus happens to be — the replacements worth undoing are made from controls outside the page.
+A change the *agent* made to the file on disk is not yours to undo, and is not offered.
 
 `PLAN.md` stays clean markdown the whole time. Comments, threads and your general feedback
 live in a `PLAN.quill.json` sidecar, so the plan file is never polluted with review metadata
@@ -122,14 +128,20 @@ the browser as tracked changes, so a bad rewrite is one click from being undone.
 
 ## Naming
 
-**Names** in the title bar asks the agent for candidates — eight to twelve, each with a line
-on why it works — and shows them as a poll. Steer it if you already know what you want
-("one word, weird west, no compound words"), pick one, and **Use as title** rewrites the
-document's `# H1` and nothing else.
+Naming is review, so it is asked for in the review round. Tick **Ask for name candidates**
+in the Update-with-AI dialog and the agent brings back eight to twelve, each with a line on
+why it works, alongside the revision — they appear at the end of the comments, with the rest
+of the annotations.
+
+A poll renames **what it was about**. Leave the field blank for the project and picking a
+candidate rewrites the document's `# H1` and nothing else; type a placeholder — a character,
+a town, a faction — and it replaces every whole-word mention of it in the plan. Steer it if
+you already know what you want ("one word, weird west, no compound words").
 
 Rounds accumulate rather than replace: what you dropped is listed back to the agent so the
 next round cannot offer it again, and the steering that produced each round stays with it.
-Candidates live in `research/options.json`.
+Candidates live in `research/options.json`. Taking one is an ordinary edit — ⌘Z takes it
+back.
 
 ## Companion documents
 
@@ -211,7 +223,7 @@ sentence.
 ```bash
 pnpm install
 pnpm build          # web bundle, then the CLI that embeds it
-pnpm test           # 550 tests
+pnpm test           # 614 tests
 pnpm typecheck
 ```
 

@@ -20,6 +20,19 @@ export interface UsePlanEditorOptions {
   markdown: string;
   /** Called on every user edit with the document serialized back to markdown. */
   onChange?: (markdown: string) => void;
+  /**
+   * Whether the pending load is something the reviewer did and can therefore
+   * take back — taking a name from the poll, say.
+   *
+   * The default is false, and that is the safe direction. The other loads are
+   * the first one and the file changing underneath us, and neither is the
+   * reviewer's edit: undoing an external reload would restore a document the
+   * file no longer has and then autosave would write it back, quietly
+   * overwriting whatever the agent had just put there.
+   *
+   * Must be set in the same render as the markdown it describes.
+   */
+  undoable?: boolean;
 }
 
 /**
@@ -43,12 +56,17 @@ export interface UsePlanEditorOptions {
 export function usePlanEditor({
   markdown,
   onChange,
+  undoable = false,
 }: UsePlanEditorOptions): Editor | null {
   // Guard: true while we are programmatically loading content
   const updatingRef = useRef(false);
   // Keep onChange stable across renders without re-creating the editor
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  // Read at load time, not at render time — the effect runs after the render
+  // that changed `markdown`, so this holds the flag that came with it.
+  const undoableRef = useRef(undoable);
+  undoableRef.current = undoable;
   // Formatting of the markdown currently in the editor; null until first load,
   // during which the serialiser simply falls back to canonical output.
   const sourceRef = useRef<SourceMap | null>(null);
@@ -79,9 +97,17 @@ export function usePlanEditor({
     // the previous document's formatting.
     sourceRef.current = plan.source;
     updatingRef.current = true;
-    editor.commands.setContent(plan.doc, {
-      emitUpdate: false,
-    });
+    editor
+      .chain()
+      /*
+       * Only the reviewer's own replacements join the undo stack. An external
+       * reload is somebody else's write, and putting it there would offer an
+       * undo that reverts to a document the file no longer has — which autosave
+       * would then write back over the top of the agent's work.
+       */
+      .setMeta("addToHistory", undoableRef.current)
+      .setContent(plan.doc, { emitUpdate: false })
+      .run();
     updatingRef.current = false;
     // Now that the schema has had its say, record how it spells each block.
     alignSource(plan, editor.getJSON());

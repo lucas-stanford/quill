@@ -164,12 +164,14 @@
 }
 
 /* ── Collapsed handle ───────────────────────────────────────────────────
-   Below the width at which the rail can be a column it would otherwise sit
-   on top of the page's left margin — that is, on top of the words. So it
-   parks as a handle and covers nothing until it is asked for. */
+   Below the width at which the rail can be a column it floats over the page's
+   left margin — that is, over the words. So it parks as a handle, fixed at the
+   top left, and covers nothing until it is asked for. */
 
 .feedback-rail--collapsed {
   width: auto;
+  max-height: none;
+  overflow: visible;
   filter: none;
 }
 

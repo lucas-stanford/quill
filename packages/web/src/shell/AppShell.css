@@ -273,15 +273,32 @@
  * = 1512px, which is the same breakpoint at which the page could already sit
  * dead centre. So at >= 1512 both rails are real columns and the page is
  * centred between them; below that there is not room for two rails beside a
- * full-width page, and this one overlays the left margin the way the comment
- * rail overlays the right on a narrow window.
+ * full-width page, and this one floats over the left margin instead.
+ */
+/*
+ * Floating tier: fixed to the viewport's top left, not absolute in the canvas.
+ *
+ * Absolute would pin it to the top of a document that scrolls out from under
+ * it, so the one control for "something about the plan as a whole" would only
+ * be reachable from page one — exactly backwards, since an objection about the
+ * whole usually occurs to you somewhere in the middle of it.
+ *
+ * `top` clears the title bar and the ribbon's slot, so it never lands on the
+ * chrome whether or not the ribbon is showing. The z-index is deliberate: above
+ * the page and its ribbon, below the selection toolbar (50) and every overlay,
+ * so asking for feedback never hides the thing you were about to comment on.
  */
 .feedback-rail {
   min-width: 0;
-  position: absolute;
-  top: calc(var(--ribbon-height) + var(--canvas-pad-top));
+  position: fixed;
+  top: calc(var(--titlebar-height) + var(--ribbon-height) + 8px);
   left: var(--canvas-gutter);
-  width: min(var(--rail-width), calc(100% - 2 * var(--canvas-gutter)));
+  z-index: 40;
+  width: min(var(--rail-width), calc(100vw - 2 * var(--canvas-gutter)));
+  /* Its own scrollbar: a long list must not run off the bottom of the screen
+     when there is no document scroll left to carry it. */
+  max-height: calc(100vh - var(--titlebar-height) - var(--ribbon-height) - 24px);
+  overflow-y: auto;
   filter: drop-shadow(0 2px 10px var(--color-shadow));
 }
 
@@ -326,6 +343,9 @@
     position: relative;
     top: auto;
     left: auto;
+    z-index: auto;
+    max-height: none;
+    overflow-y: visible;
     grid-column: 2;
     width: var(--rail-width);
     filter: none;

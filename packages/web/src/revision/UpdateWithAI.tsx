@@ -21,6 +21,7 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
+import type { BriefPoll, OptionPoll, OptionTarget } from "../types";
 import type { RevisionApi } from "./useRevision";
 import {
   canSend,
@@ -36,21 +37,80 @@ export interface UpdateWithAIProps {
   revision: RevisionApi;
   /** Number of unresolved comments plus reviewer edits awaiting the agent. */
   pendingCount: number;
+  /**
+   * Rounds of candidates already answered. Only used to tell the agent what it
+   * has offered before, so a second round never repeats a name the reviewer has
+   * already seen and passed on.
+   */
+  existingPolls?: readonly OptionPoll[];
 }
 
 /** How long the "applied"/"cancelled" pill stays before the button returns. */
 const DONE_NOTICE_MS = 6000;
 const QUIET_NOTICE_MS = 3000;
 
-export function UpdateWithAI({ revision, pendingCount }: UpdateWithAIProps) {
-  const { status, error, start, cancel } = revision;
-  const presentation = presentRevision(status, error);
+/** Ids only have to be unique within one options file; a timestamp does it. */
+function newPollId(): string {
+  return `p${Date.now().toString(36)}${Math.floor(Math.random() * 4096).toString(36)}`;
+}
+
+/** Whether a past round answered the question this one is asking. */
+function sameTarget(poll: OptionPoll, target: OptionTarget): boolean {
+  const answered = poll.target ?? { kind: "title" as const };
+  if (answered.kind !== target.kind) return false;
+  // Every title round is about the same thing — the document — whatever it was
+  // called at the time.
+  if (target.kind === "title") return true;
+  return answered.kind === "text" && answered.value === target.value;
+}
+
+/** Every candidate already offered for this target, including the dropped ones. */
+function offered(polls: readonly OptionPoll[], target: OptionTarget): string[] {
+  const seen: string[] = [];
+  for (const poll of polls) {
+    if (!sameTarget(poll, target)) continue;
+    for (const option of poll.options) {
+      if (!seen.includes(option.value)) seen.push(option.value);
+    }
+  }
+  return seen;
+}
+
+/** What the reviewer is about to ask for, in their own terms. */
+function describePollAsk(naming: string): string {
+  const subject = naming.trim();
+  return subject === ""
+    ? "Candidates for the project's title. Taking one rewrites the document's heading."
+    : `Candidates for “${subject}”. Taking one replaces every mention of it in the plan.`;
+}
+
+export function UpdateWithAI({
+  revision,
+  pendingCount,
+  existingPolls = [],
+}: UpdateWithAIProps) {
+  const { status, error, note, resolvedCount, start, cancel } = revision;
+  /*
+   * `pendingCount` is what is waiting to go; once a run is under way it is the
+   * denominator for what has come back. It falls as notes are closed live, so
+   * the total is reconstructed from the two halves rather than read from a
+   * count that is being decremented underneath the sentence describing it.
+   */
+  const presentation = presentRevision(status, error, {
+    note,
+    resolved: resolvedCount,
+    sent: pendingCount + resolvedCount,
+  });
   /** Idle with a message: nothing was sent, and the words say why. */
   const refusal = isRefusal(status, error);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [instruction, setInstruction] = useState("");
   const [noticeShown, setNoticeShown] = useState(false);
+  /** The naming request being composed, if the reviewer asked for one. */
+  const [askNames, setAskNames] = useState(false);
+  const [naming, setNaming] = useState("");
+  const [nameSteering, setNameSteering] = useState("");
 
   const rootRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -151,25 +211,49 @@ export function UpdateWithAI({ revision, pendingCount }: UpdateWithAIProps) {
   }, [status, refusal, presentation.busy]);
 
   const send = useCallback(
-    (note?: string) => {
+    (note?: string, polls?: readonly BriefPoll[]) => {
       const trimmed = note?.trim() ? note.trim() : undefined;
       lastInstructionRef.current = trimmed;
       setInstruction("");
       // Pressing send on a refusal that is already showing leaves the hook's
       // state untouched, so nothing would re-render the notice back in.
       if (refusal) setNoticeShown(true);
-      start(trimmed);
+      start(trimmed, polls);
     },
     [refusal, start],
   );
 
   const onPrimary = useCallback(() => send(), [send]);
 
+  /** The naming request as the dialog currently stands, if there is one. */
+  const composePoll = useCallback((): BriefPoll[] => {
+    if (!askNames) return [];
+    const subject = naming.trim();
+    const target: OptionTarget =
+      subject === "" ? { kind: "title" } : { kind: "text", value: subject };
+    const poll: BriefPoll = {
+      id: newPollId(),
+      subject: subject === "" ? "project name" : subject,
+      target,
+      // What has been offered for THIS target already, so a second round never
+      // hands back a name the reviewer has seen and passed on.
+      exclude: offered(existingPolls, target),
+    };
+    if (poll.exclude?.length === 0) delete poll.exclude;
+    const steering = nameSteering.trim();
+    if (steering) poll.steering = steering;
+    return [poll];
+  }, [askNames, naming, nameSteering, existingPolls]);
+
   const onDialogSubmit = useCallback(() => {
-    if (!canSend(pendingCount, instruction)) return;
+    const polls = composePoll();
+    if (!canSend(pendingCount, instruction) && polls.length === 0) return;
     closeDialog();
-    send(instruction);
-  }, [closeDialog, instruction, pendingCount, send]);
+    send(instruction, polls);
+    setAskNames(false);
+    setNaming("");
+    setNameSteering("");
+  }, [closeDialog, composePoll, instruction, pendingCount, send]);
 
   const onTextareaKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
@@ -181,7 +265,7 @@ export function UpdateWithAI({ revision, pendingCount }: UpdateWithAIProps) {
     [onDialogSubmit],
   );
 
-  const sendable = canSend(pendingCount, instruction);
+  const sendable = canSend(pendingCount, instruction) || askNames;
 
   return (
     <div className="uwai" ref={rootRef}>
@@ -314,6 +398,45 @@ export function UpdateWithAI({ revision, pendingCount }: UpdateWithAIProps) {
             onChange={(event) => setInstruction(event.target.value)}
             onKeyDown={onTextareaKeyDown}
           />
+
+          {/*
+           * Naming is review. "What do we call this?" comes up reading the same
+           * paragraph as everything else in this dialog, so it is asked here and
+           * answered in the same round — the candidates come back with the
+           * revision and sit at the end of the comments.
+           */}
+          <div className="uwai-poll">
+            <label className="uwai-poll-toggle">
+              <input
+                type="checkbox"
+                checked={askNames}
+                onChange={(event) => setAskNames(event.target.checked)}
+              />
+              Ask for name candidates
+            </label>
+            {askNames && (
+              <div className="uwai-poll-fields">
+                <input
+                  className="uwai-poll-input"
+                  type="text"
+                  value={naming}
+                  placeholder="What to rename — blank means the project title"
+                  onChange={(event) => setNaming(event.target.value)}
+                  aria-label="What to name"
+                />
+                <input
+                  className="uwai-poll-input"
+                  type="text"
+                  value={nameSteering}
+                  placeholder="Steering, optional — “one word, weird west”"
+                  onChange={(event) => setNameSteering(event.target.value)}
+                  aria-label="Steering for the names"
+                />
+                <p className="uwai-poll-hint">{describePollAsk(naming)}</p>
+              </div>
+            )}
+          </div>
+
           <div className="uwai-dialog-actions">
             <span className="uwai-dialog-hint" aria-hidden="true">
               ⌘↵ to send

@@ -13,7 +13,7 @@
 
 import type { AnnotationsApi } from "../annotations";
 import type { TrackedChangesApi } from "../tracking";
-import type { RevisionBrief } from "../types";
+import type { RevisionBrief, BriefPoll } from "../types";
 import { buildBrief, formatBriefPrompt, isBriefEmpty } from "./buildBrief";
 export function composeBrief(
   markdown: string,
@@ -39,6 +39,22 @@ export function withInstruction(brief: RevisionBrief, instruction?: string): Rev
     return rest;
   }
   return { ...brief, instruction: note };
+}
+
+/**
+ * The same brief with a request for candidate names attached.
+ *
+ * Separate from `composeBrief` for the same reason the instruction is: it comes
+ * from the dialog rather than from the document, so attaching it must not cost
+ * another scan of the plan and must not invalidate the memo the scan produced.
+ */
+export function withPolls(brief: RevisionBrief, polls?: readonly BriefPoll[]): RevisionBrief {
+  if (!polls || polls.length === 0) {
+    if (brief.polls === undefined) return brief;
+    const { polls: _dropped, ...rest } = brief;
+    return rest;
+  }
+  return { ...brief, polls: [...polls] };
 }
 
 /**

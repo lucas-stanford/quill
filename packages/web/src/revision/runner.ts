@@ -30,8 +30,17 @@ export const FIRST_POLL_DELAY_MS = 350;
 export const POLL_BACKOFF = 1.6;
 export const MAX_POLL_DELAY_MS = 2500;
 
-/** How long to wait for an agent before giving up and saying so. */
-export const REVISION_TIMEOUT_MS = 10 * 60_000;
+/**
+ * How long to wait with NOTHING happening before giving up and saying so.
+ *
+ * Idle, not total. A revision that is being worked on is not a revision that
+ * has hung, and a wall-clock budget cannot tell the difference — it fails a
+ * careful twelve-minute rewrite for taking twelve minutes. What actually
+ * distinguishes the two is silence, so the clock restarts on every sign of
+ * life: a status change, a line of commentary, another note dealt with, a new
+ * snapshot of the document.
+ */
+export const REVISION_IDLE_TIMEOUT_MS = 10 * 60_000;
 
 /** Consecutive transport failures tolerated before the run is failed. */
 export const MAX_POLL_ERRORS = 4;
@@ -59,6 +68,24 @@ export interface RevisionTransport {
   poll: () => Promise<RevisionState>;
 }
 
+/**
+ * Whether `next` shows the agent doing something `previous` did not already
+ * show. This is what restarts the idle clock, so it has to be true of real work
+ * and false of the same state polled again — otherwise a run either never times
+ * out or times out while it is working, and both are worse than no timeout.
+ */
+export function madeProgress(
+  previous: RevisionState | null,
+  next: RevisionState,
+): boolean {
+  if (previous === null) return true;
+  if (previous.status !== next.status) return true;
+  const before = previous.progress;
+  const after = next.progress;
+  if (after === undefined) return false;
+  return before === undefined || after.seq !== before.seq;
+}
+
 export interface RunRevisionOptions {
   transport: RevisionTransport;
   brief: RevisionBrief;
@@ -71,6 +98,7 @@ export interface RunRevisionOptions {
   /** Every state the server reported, in order. */
   onState?: (state: RevisionState) => void;
   now?: () => number;
+  /** Silence tolerated before the run is failed. See REVISION_IDLE_TIMEOUT_MS. */
   timeoutMs?: number;
 }
 
@@ -90,9 +118,10 @@ export async function runRevision({
   delay,
   onState,
   now = () => Date.now(),
-  timeoutMs = REVISION_TIMEOUT_MS,
+  timeoutMs = REVISION_IDLE_TIMEOUT_MS,
 }: RunRevisionOptions): Promise<RevisionState | null> {
-  const startedAt = now();
+  /** Reset by every sign of life; the timeout is measured from here. */
+  let lastProgressAt = now();
 
   const first = await transport.request(brief, prompt);
   if (signal.aborted) return null;
@@ -139,13 +168,14 @@ export async function runRevision({
     }
     idles = 0;
 
+    if (madeProgress(state, next)) lastProgressAt = now();
     state = next;
     onState?.(state);
     if (isTerminal(state.status)) return state;
 
-    if (now() - startedAt > timeoutMs) {
+    if (now() - lastProgressAt > timeoutMs) {
       throw new Error(
-        `The agent did not answer within ${Math.round(timeoutMs / 60_000)} minutes.`,
+        `The agent went quiet for ${Math.round(timeoutMs / 60_000)} minutes.`,
       );
     }
 

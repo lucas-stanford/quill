@@ -125,18 +125,49 @@ Fields:
 |------------|----------|-------------------------------------------------------------------------|
 | `id`       | yes      | Must equal the request's `id`. A reply for another id is ignored.        |
 | `status`   | yes      | `working` \| `done` \| `failed` \| `cancelled`                           |
-| `markdown` | no       | The revised plan. Omit it and quill reads `planPath` — which is normally what you want, since you just wrote it. |
+| `markdown` | no       | The revised plan. Omit it and quill reads `planPath` — which is normally what you want, since you just wrote it. On `working` it is a *snapshot*, shown straight away and replaced by the next one. |
 | `error`    | no       | Shown to the reviewer when `status` is `failed`. Always set it there.    |
+| `note`     | no       | One line, present tense: what you are doing right now. Shown in the UI.  |
+| `resolved` | no       | Ids of the comments and feedback notes you have dealt with so far.       |
 
 - **`done`** — quill reads the plan from disk (or takes your `markdown`), reports
   `status: "done"` with that text on `GET /api/revision`, and deletes both files.
   The browser applies the text as *tracked changes*, so the reviewer can reject
   the whole revision and get their document back byte-for-byte.
 - **`failed`** — put a human-readable reason in `error`; it is shown in the UI.
-- **`working`** — an optional heartbeat. It flips the UI from "queued" to
-  "working" and **restarts the timeout**, so a slow agent that keeps saying so is
-  never timed out. Send it as often as you like.
+- **`working`** — a heartbeat, and the channel for reporting work as it happens.
+  It flips the UI from "queued" to "working" and **restarts the timeout**, so an
+  agent that keeps talking is never timed out. Send it as often as you like.
 - **`cancelled`** — you decided not to service the request.
+
+### Streaming your progress
+
+Silence is the problem a heartbeat only half solves. "AI is rewriting…" for eight
+minutes is indistinguishable from a hang, which is when reviewers cancel a
+revision that was going to arrive. So a `working` reply can carry three things:
+
+```sh
+printf '{"id":"%s","status":"working","note":"Rewriting milestone 2",
+         "resolved":["c1","c2"],"markdown":%s}\n' "$id" "$(jq -Rs . < PLAN.md)" \
+  > .quill/response.tmp
+mv .quill/response.tmp .quill/revision-response.json
+```
+
+- **`note`** replaces the status pill, so the reviewer reads what you are doing.
+  It is *sticky*: a later beat that omits it leaves the last one showing, so you
+  can send a snapshot without blanking the sentence.
+- **`resolved`** closes those comment threads and feedback notes **live**, as you
+  deal with them, rather than all at once at the end. Send the whole list every
+  time if that is easier — quill takes the union, so nothing is closed twice.
+  Ids come from the brief (`brief.comments[].id`); an id quill did not send you
+  is ignored rather than guessed at.
+- **`markdown`** on a `working` reply is a snapshot of the plan as it stands.
+  Quill lands it as tracked changes immediately, and the next snapshot
+  **replaces** it — the previous attempt is rejected first, so the reviewer never
+  walks two half-finished rewrites and their own edits are never touched.
+
+All three are optional and independent. A bare `{"id":…,"status":"working"}` is
+still a perfectly good heartbeat.
 
 Quill deletes the response file as soon as it reads it. Renaming into place is
 recommended; if quill catches a half-written file it retries once before
@@ -245,27 +276,52 @@ source is a picture, not evidence, and Quill labels it as such. Then answer
 `done` as usual. Quill re-reads the manifest and serves the images to its own
 page; it never fetches anything itself.
 
-### `kind: "options"` — candidate names
+### Candidate names — asked for in the brief, not in a request of their own
 
-Naming is the decision people most want alternatives for. `scope.heading` says
-what is being named ("name" unless something else was asked for) and
-`scope.note` is the steering, when there was any.
+Naming is review. "What do we call this?" comes up reading the same paragraph as
+every other note, so it travels **in the ordinary revision brief** rather than in
+a channel of its own, and it is answered in the same round.
 
-Append a NEW poll to `research/options.json`, **keeping every poll already
-there** — the rounds are the argument, not just the answer, and the candidates
-already offered are listed in the prompt so you do not repeat them.
+A brief that asks for names carries a `polls` array:
+
+```json
+{ "brief": { "markdown": "…", "comments": [], "edits": [],
+    "polls": [
+      { "id": "pk1", "subject": "the courier",
+        "target": { "kind": "text", "value": "Vera" },
+        "steering": "one word, weird west",
+        "exclude": ["Juno", "Marrow"] }
+    ] } }
+```
+
+The rendered prompt spells all of this out, so an agent that just reads `.prompt`
+needs nothing from this section. What matters if you are parsing the brief:
+
+| field      | meaning                                                                |
+|------------|------------------------------------------------------------------------|
+| `id`       | Copy it into the poll you write. It is how the answer is matched.       |
+| `subject`  | What is being named, in the reviewer's words.                           |
+| `target`   | `{"kind":"title"}` renames the document; `{"kind":"text","value":"…"}` replaces every mention of that placeholder. Copy it through verbatim. |
+| `steering` | Optional. What the reviewer asked for.                                  |
+| `exclude`  | Optional. Already offered for this target — never offer one of them again. |
+
+**Your reply is still the document and nothing else.** The candidates go to
+`research/options.json`, beside the plan, where the previous rounds already are.
+Append a NEW poll per request, **keeping every poll already there** — the rounds
+are the argument, not just the answer.
 
 ```json
 {
   "version": 1,
   "polls": [
     {
-      "id": "…",
-      "subject": "name",
+      "id": "pk1",
+      "subject": "the courier",
+      "target": { "kind": "text", "value": "Vera" },
       "steering": "one word, weird west",
       "createdAt": "2026-08-06T00:00:00.000Z",
       "options": [
-        { "id": "…", "value": "Palaver",
+        { "id": "o1", "value": "Palaver",
           "note": "Period word for a parley.", "dropped": false }
       ]
     }
@@ -273,17 +329,25 @@ already offered are listed in the prompt so you do not repeat them.
 }
 ```
 
-Eight to twelve candidates, each with a `note` saying why it works — a name
-with no argument behind it cannot be weighed against one that has. **Do not set
-`chosen`.** Picking is the reviewer's job, and an agent that picks has taken the
-decision the poll exists to leave open. Touch nothing else: not the plan, not
-the research.
+Eight to twelve candidates, each with a `note` saying why it works — a name with
+no argument behind it cannot be weighed against one that has. **Do not set
+`chosen`,** and **do not rename anything in the plan yourself**: picking is the
+reviewer's job, offering is the whole request, and an agent that does either has
+taken the decision the poll exists to leave open.
+
+Quill re-reads the file when the revision lands and shows the new rounds at the
+end of the comment rail, with the rest of the annotations.
 
 ## 5. Timeouts and cancellation
 
-- A revision that is never answered fails after **5 minutes** with a message
-  telling the human what to implement. Change it with `--revision-timeout 900`,
+- A revision that goes **quiet** for 5 minutes fails, with a message telling the
+  human what to implement. Change it with `--revision-timeout 900`,
   `QUILL_REVISION_TIMEOUT=900`, or `--revision-timeout off`.
+- The clock is **idle time, not total time**: every `working` reply restarts it.
+  A revision that is being worked on is not a revision that has hung, and a
+  wall-clock budget cannot tell the difference — it fails exactly the careful
+  half-hour rewrite it should be waiting for. Take as long as you need; just say
+  so while you are taking it.
 - **If `.quill/revision-request.json` disappears, stop work.** That is quill's
   cancel signal — the reviewer pressed cancel, the revision timed out, or quill
   exited. Deleting the file yourself is *not* a completion signal; quill ignores

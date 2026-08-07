@@ -390,3 +390,107 @@ describe("validateRevisionRequest — routing", () => {
   });
 });
 
+
+describe("a naming request in the brief", () => {
+  const base = { markdown: "# Plan\n", comments: [], edits: [] };
+
+  it("carries the request through", () => {
+    // The validator REBUILDS the brief, so anything it does not name is
+    // silently dropped — and a dropped request is a poll the agent never
+    // hears about and the reviewer waits for.
+    const result = validateRevisionBrief({
+      ...base,
+      polls: [
+        {
+          id: "pk1",
+          subject: "the courier",
+          target: { kind: "text", value: "Vera" },
+          steering: "one word",
+          exclude: ["Juno"],
+        },
+      ],
+    });
+
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.brief.polls, [
+      {
+        id: "pk1",
+        subject: "the courier",
+        target: { kind: "text", value: "Vera" },
+        steering: "one word",
+        exclude: ["Juno"],
+      },
+    ]);
+  });
+
+  it("keeps a title request as a title request", () => {
+    const result = validateRevisionBrief({
+      ...base,
+      polls: [{ id: "pk1", subject: "project name", target: { kind: "title" } }],
+    });
+
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.brief.polls[0].target, { kind: "title" });
+  });
+
+  it("rejects a target it cannot act on rather than guessing", () => {
+    // Defaulting a malformed target to "title" is how a poll about a minor
+    // character renames the whole document.
+    for (const target of [undefined, { kind: "elsewhere" }, { kind: "text" }, { kind: "text", value: "  " }]) {
+      const result = validateRevisionBrief({ ...base, polls: [{ id: "p", subject: "s", target }] });
+      assert.equal(result.ok, false, `expected a refusal for ${JSON.stringify(target)}`);
+    }
+  });
+
+  it("rejects a request with no id, which is how an answer is matched", () => {
+    const result = validateRevisionBrief({
+      ...base,
+      polls: [{ id: "  ", subject: "s", target: { kind: "title" } }],
+    });
+
+    assert.equal(result.ok, false);
+  });
+
+  it("leaves the field off entirely when nothing was asked for", () => {
+    const result = validateRevisionBrief(base);
+
+    assert.equal(result.ok, true);
+    assert.equal("polls" in result.brief, false);
+  });
+});
+
+describe("progress on an agent response", () => {
+  it("carries a note and the ids dealt with", () => {
+    const result = validateAgentResponse({
+      id: "r1",
+      status: "working",
+      note: "Rewriting milestone 2",
+      resolved: ["c1", "c2"],
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.response.note, "Rewriting milestone 2");
+    assert.deepEqual(result.response.resolved, ["c1", "c2"]);
+  });
+
+  it("carries a snapshot on a working reply, not only on done", () => {
+    const result = validateAgentResponse({ id: "r1", status: "working", markdown: "# Half\n" });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.response.markdown, "# Half\n");
+  });
+
+  it("refuses ids that are not strings", () => {
+    const result = validateAgentResponse({ id: "r1", status: "working", resolved: [1, 2] });
+
+    assert.equal(result.ok, false);
+  });
+
+  it("still accepts a bare heartbeat from an agent that reports nothing", () => {
+    const result = validateAgentResponse({ id: "r1", status: "working" });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.response.note, undefined);
+    assert.equal(result.response.resolved, undefined);
+  });
+});

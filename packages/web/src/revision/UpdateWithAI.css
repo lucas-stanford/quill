@@ -373,6 +373,73 @@
   border-color: var(--color-accent);
 }
 
+/* ── Asking for names, in the same round ─────────────────────────────────
+   Naming is review: "what do we call this?" comes up reading the same
+   paragraph as everything else in this dialog, so it is asked here and the
+   candidates come back with the revision. */
+
+.uwai-poll {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-rule);
+}
+
+.uwai-poll-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.uwai-poll-toggle input {
+  margin: 0;
+  accent-color: var(--color-accent);
+}
+
+.uwai-poll-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.uwai-poll-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border: 1px solid var(--color-rule);
+  border-radius: 5px;
+  background: var(--color-canvas);
+  color: var(--color-text);
+  font-family: var(--font-chrome);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.uwai-poll-input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.uwai-poll-input:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -1px;
+  border-color: var(--color-accent);
+}
+
+/* Says what taking a candidate will actually rewrite, before it is asked
+   for — the difference between renaming a character and renaming the
+   document is not recoverable by reading the answer. */
+.uwai-poll-hint {
+  margin: 0;
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--color-text-muted);
+}
+
 .uwai-dialog-actions {
   display: flex;
   align-items: center;

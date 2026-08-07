@@ -5,6 +5,7 @@ import {
   MAX_POLL_DELAY_MS,
   MAX_POLL_ERRORS,
   isTerminal,
+  madeProgress,
   pollDelay,
   runRevision,
   timerDelay,
@@ -244,7 +245,7 @@ describe("runRevision", () => {
     expect(final?.status).toBe("done");
   });
 
-  it("gives up on an agent that never answers", async () => {
+  it("gives up on an agent that has gone quiet", async () => {
     const script = scripted(state("working"), [state("working")]);
     let clock = 0;
 
@@ -258,7 +259,82 @@ describe("runRevision", () => {
         now: () => (clock += 60_000),
         timeoutMs: 120_000,
       }),
-    ).rejects.toThrow(/did not answer/);
+    ).rejects.toThrow(/went quiet/);
+  });
+
+  /*
+   * The point of an idle timeout rather than a wall-clock one. This run is
+   * twenty minutes long against a two-minute budget, and every single poll is
+   * past the budget measured from the start — so a total timeout fails it, and
+   * fails exactly the careful revision it should be waiting for.
+   */
+  it("waits indefinitely while the agent keeps reporting progress", async () => {
+    const beats = Array.from({ length: 20 }, (_, i) => ({
+      ...state("working"),
+      progress: { seq: i + 1, resolved: [] as string[] },
+    }));
+    const script = scripted(state("working"), [...beats, state("done", { markdown: "# ok" })]);
+    let clock = 0;
+
+    const final = await runRevision({
+      transport: script.transport,
+      brief: BRIEF,
+      prompt: PROMPT,
+      signal: new AbortController().signal,
+      delay: noDelay,
+      now: () => (clock += 60_000),
+      timeoutMs: 120_000,
+    });
+
+    expect(final?.status).toBe("done");
+  });
+
+  it("times out on heartbeats that report the same progress over and over", async () => {
+    // A liveness ping that never advances is not progress; treating it as such
+    // would mean a hung agent that still says "working" is waited on forever.
+    const stuck = { ...state("working"), progress: { seq: 4, resolved: [] as string[] } };
+    const script = scripted(stuck, [stuck, stuck, stuck, stuck, stuck]);
+    let clock = 0;
+
+    await expect(
+      runRevision({
+        transport: script.transport,
+        brief: BRIEF,
+        prompt: PROMPT,
+        signal: new AbortController().signal,
+        delay: noDelay,
+        now: () => (clock += 60_000),
+        timeoutMs: 120_000,
+      }),
+    ).rejects.toThrow(/went quiet/);
+  });
+});
+
+describe("madeProgress", () => {
+  const working = { id: "r1", status: "working" as const, mode: "attached" as const };
+
+  it("counts the first state as progress", () => {
+    expect(madeProgress(null, working)).toBe(true);
+  });
+
+  it("counts a change of status as progress", () => {
+    expect(madeProgress({ ...working, status: "queued" }, working)).toBe(true);
+  });
+
+  it("does not count the same state polled twice", () => {
+    expect(madeProgress(working, working)).toBe(false);
+  });
+
+  it("counts a new report from the agent", () => {
+    const before = { ...working, progress: { seq: 1, resolved: [] } };
+    const after = { ...working, progress: { seq: 2, resolved: [] } };
+
+    expect(madeProgress(before, after)).toBe(true);
+    expect(madeProgress(after, after)).toBe(false);
+  });
+
+  it("counts the first report as progress", () => {
+    expect(madeProgress(working, { ...working, progress: { seq: 1, resolved: [] } })).toBe(true);
   });
 });
 

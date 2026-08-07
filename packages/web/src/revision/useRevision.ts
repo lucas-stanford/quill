@@ -46,12 +46,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AnnotationsApi } from "../annotations";
 import type { TrackedChangesApi } from "../tracking";
-import type { RevisionState, RevisionStatus } from "../types";
+import type { BriefPoll, RevisionState, RevisionStatus } from "../types";
 import { cancelRevision, fetchRevision, requestRevision } from "../api";
-import { composeBrief, renderPrompt, withInstruction } from "./compose";
+import { composeBrief, renderPrompt, withInstruction, withPolls } from "./compose";
 import { briefCommentIds, briefFeedbackIds } from "./buildBrief";
 import { decideApply } from "./applyPlan";
 import { runRevision, timerDelay } from "./runner";
+import { planAbsorb } from "./progress";
 import { NOTHING_TO_SEND, transportFailure } from "./status";
 
 export interface UseRevisionOptions {
@@ -64,8 +65,12 @@ export interface UseRevisionOptions {
 export interface RevisionApi {
   status: RevisionStatus;
   error: string | null;
+  /** What the agent last said it was doing, while it is still doing it. */
+  note: string | null;
+  /** How many of the notes that went out have been reported dealt with. */
+  resolvedCount: number;
   /** Asks the agent for a revision, then applies it as tracked changes. */
-  start: (instruction?: string) => void;
+  start: (instruction?: string, polls?: readonly BriefPoll[]) => void;
   cancel: () => void;
 }
 
@@ -77,6 +82,8 @@ export function useRevision({
 }: UseRevisionOptions): RevisionApi {
   const [status, setStatus] = useState<RevisionStatus>("idle");
   const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [resolvedCount, setResolvedCount] = useState(0);
 
   /** Live values for the async loop, which outlives any one render. */
   const enabledRef = useRef(enabled);
@@ -103,6 +110,12 @@ export function useRevision({
   const sentCommentIdsRef = useRef<string[]>([]);
   /** The feedback notes that went out with it, closed on the same event. */
   const sentFeedbackIdsRef = useRef<string[]>([]);
+  /** Ids already closed live, so a re-report never closes one twice. */
+  const closedIdsRef = useRef<Set<string>>(new Set());
+  /** `progress.seq` of the last report acted on. */
+  const seenSeqRef = useRef(0);
+  /** The last streamed snapshot landed in the document. */
+  const snapshotRef = useRef<string | null>(null);
 
   /**
    * The brief as it stands. Rebuilt when — and only when — the plan, the
@@ -137,12 +150,63 @@ export function useRevision({
   }, []);
 
   /**
+   * Take a report of work in progress: show what is being done, close the
+   * notes already dealt with, and land the document as it currently stands.
+   *
+   * The snapshot is landed by rejecting the AI's previous attempt and diffing
+   * the new one against what is left. Each snapshot supersedes the last rather
+   * than stacking on it, because diffing a rewrite against a document that
+   * already contains a half-finished rewrite compares the agent's work with
+   * itself. Rejecting by author is what makes that safe: the reviewer's own
+   * edits are not the AI's and are not touched, so a revision can stream in
+   * underneath somebody who is still typing.
+   */
+  const absorb = useCallback((state: RevisionState) => {
+    const plan = planAbsorb({
+      progress: state.progress,
+      seenSeq: seenSeqRef.current,
+      sentComments: sentCommentIdsRef.current,
+      sentFeedback: sentFeedbackIdsRef.current,
+      closed: closedIdsRef.current,
+      landed: snapshotRef.current,
+    });
+    if (plan.skip) return;
+    seenSeqRef.current = plan.seq;
+
+    if (plan.note !== null) setNote(plan.note);
+
+    if (plan.comments.length > 0) annotationsRef.current.resolveMany(plan.comments, true);
+    if (plan.feedback.length > 0) annotationsRef.current.resolveFeedbackMany(plan.feedback, true);
+    if (plan.comments.length + plan.feedback.length > 0) {
+      for (const id of [...plan.comments, ...plan.feedback]) closedIdsRef.current.add(id);
+      setResolvedCount(closedIdsRef.current.size);
+    }
+
+    if (plan.snapshot === null) return;
+    const changes = trackingRef.current;
+    if (snapshotRef.current !== null) changes.rejectAll("ai");
+    changes.applyRevision(plan.snapshot);
+    snapshotRef.current = plan.snapshot;
+  }, []);
+
+  /**
    * Land a finished revision. Everything that reaches the document goes
    * through `tracking`, so a revision is always something the reviewer can
    * walk, accept and reject.
    */
   const land = useCallback(
     (state: RevisionState) => {
+      /*
+       * A streamed snapshot is a draft of the answer, not the answer. Take it
+       * back out before the final one lands, or the reviewer walks two sets of
+       * tracked changes for one revision and the diff is against a document
+       * the agent never saw.
+       */
+      if (snapshotRef.current !== null) {
+        trackingRef.current.rejectAll("ai");
+        snapshotRef.current = null;
+      }
+
       const decision = decideApply({
         id: state.id,
         markdown: state.markdown,
@@ -197,12 +261,12 @@ export function useRevision({
   );
 
   const start = useCallback(
-    (instruction?: string) => {
+    (instruction?: string, polls?: readonly BriefPoll[]) => {
       if (!enabledRef.current) return;
       // A second press while the agent is working is a mis-click, not a queue.
       if (abortRef.current) return;
 
-      const brief = withInstruction(briefRef.current, instruction);
+      const brief = withPolls(withInstruction(briefRef.current, instruction), polls);
       const prompt = renderPrompt(brief);
       if (prompt === null) {
         // Nothing was asked for. No request goes out, so the machine stays
@@ -214,6 +278,13 @@ export function useRevision({
       baselineRef.current = markdownRef.current;
       sentCommentIdsRef.current = briefCommentIds(annotationsRef.current);
       sentFeedbackIdsRef.current = briefFeedbackIds(annotationsRef.current);
+      // Every run starts its own stream. Carrying any of this over would close
+      // notes against the wrong brief and reject a snapshot that is not there.
+      closedIdsRef.current = new Set();
+      seenSeqRef.current = 0;
+      snapshotRef.current = null;
+      setNote(null);
+      setResolvedCount(0);
       const controller = new AbortController();
       abortRef.current = controller;
       settle("queued", null);
@@ -229,6 +300,7 @@ export function useRevision({
           // Report progress; terminal states are handled below, once applied.
           if (state.status === "queued" || state.status === "working") {
             setStatus(state.status);
+            absorb(state);
           }
         },
       })
@@ -257,7 +329,7 @@ export function useRevision({
           );
         });
     },
-    [land, settle],
+    [absorb, land, settle],
   );
 
   const cancel = useCallback(() => {
@@ -270,5 +342,5 @@ export function useRevision({
     settle("cancelled", null);
   }, [settle]);
 
-  return { status, error, start, cancel };
+  return { status, error, note, resolvedCount, start, cancel };
 }

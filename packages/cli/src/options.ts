@@ -19,7 +19,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { hashContent } from "./hash.js";
 import { writeFileAtomic } from "./atomic.js";
-import type { OptionPoll, OptionsManifest, NameOption } from "./types.js";
+import type { OptionPoll, OptionsManifest, NameOption, OptionTarget } from "./types.js";
 
 export const OPTIONS_DIR = "research";
 export const OPTIONS_FILE = "options.json";
@@ -85,10 +85,29 @@ export function parseOptions(raw: unknown): OptionsManifest {
     // A chosen id that names nothing is worse than none — it would render as a
     // pick nobody made.
     if (chosen && options.some((o) => o.id === chosen)) poll.chosen = chosen;
+    const target = parseTarget(p.target);
+    if (target) poll.target = target;
     polls.push(poll);
   }
 
   return { version: OPTIONS_VERSION, polls };
+}
+
+/**
+ * What the round is about.
+ *
+ * Absent, unrecognised, or a text target with nothing to replace all mean the
+ * same thing: the document's title, which is what a poll meant before targets
+ * existed. Dropping a malformed target rather than the round keeps one bad
+ * field from costing the candidates written beside it.
+ */
+function parseTarget(raw: unknown): OptionTarget | undefined {
+  if (typeof raw !== "object" || raw === null) return undefined;
+  const t = raw as Record<string, unknown>;
+  if (t.kind === "title") return { kind: "title" };
+  if (t.kind !== "text") return undefined;
+  const value = str(t.value).trim();
+  return value === "" ? undefined : { kind: "text", value };
 }
 
 export interface OptionsState {

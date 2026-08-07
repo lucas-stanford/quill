@@ -85,6 +85,18 @@ export interface NameOption {
   dropped: boolean;
 }
 
+/**
+ * What a poll is about, and therefore what taking a candidate rewrites.
+ *
+ * Absent means the document's own title, which is what every poll meant before
+ * there was anything else to mean — so a round written by an older quill keeps
+ * behaving exactly as it did.
+ */
+export type OptionTarget =
+  | { kind: "title" }
+  /** A placeholder inside the plan: a character, a town, a faction. */
+  | { kind: "text"; value: string };
+
 export interface OptionPoll {
   id: string;
   /** What is being named — "name" unless something else was asked for. */
@@ -95,6 +107,8 @@ export interface OptionPoll {
   options: NameOption[];
   /** The id of the option that won, when one has. */
   chosen?: string;
+  /** What taking a candidate replaces. Absent means the title. */
+  target?: OptionTarget;
 }
 
 export interface OptionsManifest {
@@ -248,6 +262,26 @@ export interface BriefComment {
 }
 
 /** The structured brief sent to the agent. Not a diff dump. */
+/**
+ * A round of candidate names asked for as part of a review round.
+ *
+ * Naming is review, so it travels in the brief with everything else rather
+ * than in a side channel of its own. The agent answers it by writing
+ * `research/options.json` — its reply is still the document and nothing else.
+ */
+export interface BriefPoll {
+  /** Id the agent copies into the poll it writes, so the answer can be matched. */
+  id: string;
+  /** What is being named, in the reviewer's words. */
+  subject: string;
+  /** What taking a candidate will replace. */
+  target: OptionTarget;
+  /** Optional steering — "one word, weird west, no compound words". */
+  steering?: string;
+  /** Values already offered for this target, so a round never repeats one. */
+  exclude?: string[];
+}
+
 export interface RevisionBrief {
   markdown: string;
   comments: BriefComment[];
@@ -256,6 +290,8 @@ export interface RevisionBrief {
   feedback?: string[];
   /** Freeform note from the update dialog. */
   instruction?: string;
+  /** Name candidates asked for in this round, answered alongside the rewrite. */
+  polls?: BriefPoll[];
 }
 
 export type RevisionStatus = "idle" | "queued" | "working" | "done" | "failed" | "cancelled";
@@ -303,6 +339,24 @@ export interface RevisionRequest {
   prompt: string;
 }
 
+/**
+ * Work reported while a revision is still being made.
+ *
+ * `seq` counts the reports, so the browser can tell a fresh one from the same
+ * one polled twice without diffing the contents — which for a whole-document
+ * snapshot would be the expensive way to learn nothing.
+ */
+export interface RevisionProgress {
+  /** Increments on every report the agent sends. Starts at 1. */
+  seq: number;
+  /** One line, present tense: what the agent is doing now. */
+  note?: string;
+  /** Every comment and feedback id reported dealt with so far, deduplicated. */
+  resolved: string[];
+  /** The plan as it currently stands, if the agent sent one. */
+  markdown?: string;
+}
+
 /** GET /api/revision — poll for the outcome. */
 export interface RevisionState {
   id: string;
@@ -313,6 +367,8 @@ export interface RevisionState {
   error?: string;
   /** How the revision is being serviced. */
   mode: "attached" | "detached";
+  /** Present once the agent has reported anything about work in progress. */
+  progress?: RevisionProgress;
 }
 
 /**

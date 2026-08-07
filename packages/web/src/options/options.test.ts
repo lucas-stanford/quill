@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { retitle } from "./retitle";
-import { renderOptionsPrompt } from "./useOptions";
-import type { OptionPoll, RevisionScope } from "../types";
+import { applyChoice, renameText, retitle, useLabel, wouldChange } from "./apply";
 
 describe("retitle", () => {
   const PLAN = `# Old Name
@@ -51,51 +49,77 @@ Something.
   });
 });
 
-describe("renderOptionsPrompt", () => {
-  const scope: RevisionScope = {
-    document: "research/options.json",
-    heading: "name",
-    text: "",
-    kind: "options",
-    mode: "append",
-  };
+describe("renameText", () => {
+  const PLAN = `# The Long Road
 
-  const poll = (values: string[]): OptionPoll => ({
-    id: "p1",
-    subject: "name",
-    steering: "",
-    createdAt: "2026-08-06T00:00:00.000Z",
-    options: values.map((value, i) => ({ id: `o${i}`, value, note: "", dropped: false })),
+Vera rides west. Veracruz is three days out, and Vera does not stop.
+
+- Vera's revolver
+- A note addressed to "Vera"
+`;
+
+  it("replaces every mention", () => {
+    const next = renameText(PLAN, "Vera", "Juno");
+
+    expect(next).not.toContain("Vera ");
+    expect(next.match(/Juno/g)).toHaveLength(4);
   });
 
-  it("asks for a spread with reasons, and refuses to pick", () => {
-    const prompt = renderOptionsPrompt(scope, []);
-
-    expect(prompt).toContain("Eight to twelve candidates");
-    expect(prompt).toContain("`note`");
-    // Picking is the reviewer's job; an agent that chooses has taken the
-    // decision the poll exists to leave open.
-    expect(prompt).toContain("Do not set `chosen`");
+  it("leaves a longer word that merely starts with the name alone", () => {
+    // The whole reason this is not a plain replace: renaming Vera must not
+    // turn Veracruz into Junocruz.
+    expect(renameText(PLAN, "Vera", "Juno")).toContain("Veracruz");
   });
 
-  it("lists what has already been offered so a round cannot repeat itself", () => {
-    const prompt = renderOptionsPrompt(scope, [poll(["Steel Sunrise", "Ironmouth"])]);
-
-    expect(prompt).toContain("ALREADY OFFERED");
-    expect(prompt).toContain("- Steel Sunrise");
-    expect(prompt).toContain("- Ironmouth");
+  it("matches a name with an accent in it", () => {
+    // \b is ASCII-only, so a word-boundary regex refuses exactly the names
+    // most likely to be worth renaming.
+    expect(renameText("Renée rides out.", "Renée", "Juno")).toBe("Juno rides out.");
   });
 
-  it("carries the steering when there is any, and says nothing when there is not", () => {
-    expect(renderOptionsPrompt({ ...scope, note: "one word" }, [])).toContain(
-      "WHAT THE REVIEWER ASKED FOR",
+  it("does not match a name glued to a letter on either side", () => {
+    expect(renameText("xVera and Verax", "Vera", "Juno")).toBe("xVera and Verax");
+  });
+
+  it("refuses an empty replacement rather than deleting the name", () => {
+    expect(renameText(PLAN, "Vera", "   ")).toBe(PLAN);
+  });
+
+  it("is a no-op when the name is already what it should be", () => {
+    expect(renameText(PLAN, "Vera", "Vera")).toBe(PLAN);
+  });
+});
+
+describe("applyChoice", () => {
+  const PLAN = "# Untitled project\n\nVera rides west.\n";
+
+  it("rewrites the title when the poll was about the document", () => {
+    expect(applyChoice(PLAN, { kind: "title" }, "Palaver")).toBe(
+      "# Palaver\n\nVera rides west.\n",
     );
-    expect(renderOptionsPrompt(scope, [])).not.toContain("WHAT THE REVIEWER ASKED FOR");
   });
 
-  it("names the subject it was asked for", () => {
-    expect(renderOptionsPrompt({ ...scope, heading: "tagline" }, [])).toContain(
-      "candidate taglines",
-    );
+  it("renames the placeholder when the poll was about something in the plan", () => {
+    const next = applyChoice(PLAN, { kind: "text", value: "Vera" }, "Juno");
+
+    // The title is a poll about the document, and this was not that poll.
+    expect(next).toBe("# Untitled project\n\nJuno rides west.\n");
+  });
+
+  it("treats a round with no target as a round about the title", () => {
+    // Rounds written before targets existed all meant the document.
+    expect(applyChoice(PLAN, undefined, "Palaver")).toBe("# Palaver\n\nVera rides west.\n");
+  });
+
+  it("reports a rename that would do nothing", () => {
+    expect(wouldChange(PLAN, { kind: "text", value: "Vera" }, "Juno")).toBe(true);
+    // Already renamed, or edited by hand: saying nothing would look like success.
+    expect(wouldChange(PLAN, { kind: "text", value: "Absent" }, "Juno")).toBe(false);
+  });
+
+  it("labels the action for what it actually replaces", () => {
+    expect(useLabel({ kind: "title" })).toBe("Use as title");
+    expect(useLabel(undefined)).toBe("Use as title");
+    expect(useLabel({ kind: "text", value: "Vera" })).toContain("Vera");
   });
 });

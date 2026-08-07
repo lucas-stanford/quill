@@ -21,9 +21,40 @@ export interface RevisionPresentation {
   busy: boolean;
 }
 
+/** What the agent has said about the work so far, as the copy needs it. */
+export interface RevisionProgressCopy {
+  /** Its own line about what it is doing now. */
+  note: string | null;
+  /** How many of the notes that went out it has reported dealt with. */
+  resolved: number;
+  /** How many went out. */
+  sent: number;
+}
+
+/** The pill while the agent is working, given whatever it has told us. */
+function workingLabel(progress: RevisionProgressCopy | undefined): string {
+  const note = progress?.note?.trim();
+  if (note) return note;
+  if (progress && progress.sent > 0 && progress.resolved > 0) {
+    return `Rewriting — ${progress.resolved} of ${progress.sent} done`;
+  }
+  return "AI is rewriting…";
+}
+
+function workingAnnouncement(progress: RevisionProgressCopy | undefined): string {
+  const note = progress?.note?.trim();
+  const tail = "You can keep reading, or cancel.";
+  if (note) return `${note} ${tail}`;
+  if (progress && progress.sent > 0 && progress.resolved > 0) {
+    return `The agent has dealt with ${progress.resolved} of ${progress.sent} notes. ${tail}`;
+  }
+  return `The agent is rewriting the plan. ${tail}`;
+}
+
 export function presentRevision(
   status: RevisionStatus,
   error: string | null,
+  progress?: RevisionProgressCopy,
 ): RevisionPresentation {
   switch (status) {    case "queued":
       return {
@@ -33,9 +64,15 @@ export function presentRevision(
         busy: true,
       };
     case "working":
+      /*
+       * An agent that reports what it is doing gets to say so. "AI is
+       * rewriting…" for eight minutes is indistinguishable from a hang, which
+       * is the whole reason the reviewer reaches for Cancel on a revision that
+       * was going to arrive.
+       */
       return {
-        label: "AI is rewriting…",
-        announcement: "The agent is rewriting the plan. You can keep reading, or cancel.",
+        label: workingLabel(progress),
+        announcement: workingAnnouncement(progress),
         tone: "busy",
         busy: true,
       };

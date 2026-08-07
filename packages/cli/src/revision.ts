@@ -36,7 +36,13 @@ import { watch, rmSync } from "node:fs";
 import type { FSWatcher } from "node:fs";
 import { mkdir, readFile, rm } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import type { RevisionBrief, RevisionScope, RevisionState, RevisionTarget } from "./types.js";
+import type {
+  RevisionBrief,
+  RevisionProgress,
+  RevisionScope,
+  RevisionState,
+  RevisionTarget,
+} from "./types.js";
 import { writeFileAtomic } from "./atomic.js";
 import {
   QUILL_DIR,
@@ -108,6 +114,8 @@ interface InFlight {
   killTimer: NodeJS.Timeout | null;
   /** Text of a response file that would not parse, and when it first failed. */
   unreadableResponse: { text: string; since: number } | null;
+  /** Work the agent has reported so far, accumulated across heartbeats. */
+  progress: RevisionProgress | null;
 }
 
 /*
@@ -234,6 +242,7 @@ export class RevisionManager {
       watcher: null,
       killTimer: null,
       unreadableResponse: null,
+      progress: null,
     };
 
     this.#armTimeout(id);
@@ -447,9 +456,34 @@ export class RevisionManager {
     if (!inFlight || inFlight.id !== id || inFlight.settled) return;
 
     if (response.status === "working") {
-      // A heartbeat. Keep waiting, and restart the clock so a slow-but-alive
-      // agent is never timed out.
-      this.#state = { id, status: "working", mode: this.mode };
+      /*
+       * A heartbeat, and possibly the work so far. Keep waiting, restart the
+       * clock so a slow-but-alive agent is never timed out, and carry what it
+       * told us so the browser can show it and close the notes it has answered.
+       *
+       * Resolved ids accumulate as a union: an agent that resends its whole
+       * list every beat is the easy thing to write, and must not be punished
+       * for it by having notes closed twice or dropped.
+       */
+      const previous = inFlight.progress;
+      const resolved = previous ? [...previous.resolved] : [];
+      for (const rid of response.resolved ?? []) {
+        if (rid !== "" && !resolved.includes(rid)) resolved.push(rid);
+      }
+
+      const progress: RevisionProgress = {
+        seq: (previous?.seq ?? 0) + 1,
+        resolved,
+      };
+      // Sticky: a beat that only ships a snapshot must not blank the line of
+      // commentary the one before it set.
+      const note = response.note?.trim() || previous?.note;
+      if (note) progress.note = note;
+      const markdown = response.markdown ?? previous?.markdown;
+      if (markdown !== undefined) progress.markdown = markdown;
+
+      inFlight.progress = progress;
+      this.#state = { id, status: "working", mode: this.mode, progress };
       this.#armTimeout(id);
       return;
     }
@@ -488,6 +522,11 @@ export class RevisionManager {
     await this.#removeRequestFile();
     const done: RevisionState = { id, status: "done", mode: this.mode };
     if (markdown !== undefined) done.markdown = markdown;
+    // What it reported along the way travels with the result: the last line of
+    // commentary is the best short answer to "what did it just do?", and the
+    // resolved ids let the browser close exactly what was dealt with even if
+    // the final reply did not repeat them.
+    if (inFlight.progress) done.progress = inFlight.progress;
     this.#finish(id, done);
   }
 

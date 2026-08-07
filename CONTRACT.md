@@ -88,7 +88,7 @@ Frozen signatures are in `approve/useApprove.ts` and `approve/ApproveButton.tsx`
 pnpm install
 pnpm typecheck && pnpm build && pnpm test
 ```
-**550 tests pass at head** (211 CLI via node:test, 339 web via vitest). Do not regress them.
+**614 tests pass at head** (227 CLI via node:test, 387 web via vitest). Do not regress them.
 
 ## Definition of done for your lane
 

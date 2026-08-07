@@ -1,105 +1,52 @@
-/* ── Name options ────────────────────────────────────────────────────────
-   The naming poll. An overlay, like the companion drawer and for the same
-   reason: the plan's editor keeps its tracked changes and comment anchors
-   while you are in here. */
+/* ── Name candidates, at the end of the comment rail ─────────────────────
+   Not an overlay and not a screen. A poll is asked for in the same round as
+   every other note and comes back in the same column they do — below the
+   comments, because it is about the document rather than any one line of it
+   and has no anchor to sit beside.
 
-.options-scrim {
-  position: fixed;
-  inset: 0;
-  z-index: 56;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 32px 24px;
-  background: color-mix(in srgb, #000 58%, transparent);
-}
+   It renders AFTER the rail's positioned layer, which places every bubble
+   against text coordinates measured from its own top. Anything stacked above
+   that layer moves every anchor in the document. */
 
-.options-panel {
-  display: flex;
-  flex-direction: column;
-  width: min(720px, 100%);
-  max-height: 100%;
-  overflow: hidden;
-  background: var(--color-canvas, #17171a);
-  border: 1px solid var(--color-titlebar-border, #2d2d30);
-  border-radius: 10px;
-  box-shadow: 0 18px 48px rgb(0 0 0 / 55%);
-}
-
-.options-panel:focus-visible {
-  outline: none;
-}
-
-.options-head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  background: var(--color-titlebar-bg, #1c1c1f);
-  border-bottom: 1px solid var(--color-titlebar-border, #2d2d30);
-}
-
-.options-title {
-  flex: 0 0 auto;
+.poll-list {
+  margin-top: 18px;
+  padding: 12px;
   font-family: var(--font-chrome, system-ui, sans-serif);
-  font-size: 13px;
+  background: var(--color-comment-bg, #1f1f23);
+  border: 1px solid var(--color-comment-border, #2d2d30);
+  border-radius: 8px;
+}
+
+.poll-list-title {
+  margin: 0 0 10px;
+  font-size: 10.5px;
   font-weight: 600;
-  color: var(--color-text, #e6e6e6);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted, #8a8a8e);
 }
 
-.options-status {
-  flex: 1 1 auto;
-  min-width: 0;
-  font-family: var(--font-chrome, system-ui, sans-serif);
-  font-size: 11px;
-  color: var(--color-text-muted, #8a8a8e);
-  text-align: right;
+/* What the round was about — a title round and a character round look
+   identical without it, and they rename very different things. */
+.options-round-subject {
+  flex: 0 0 auto;
+  max-width: 45%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  padding: 1px 6px;
+  color: var(--color-canvas, #17171a);
+  background: var(--color-accent, #4fa3e0);
+  border-radius: 8px;
 }
 
-.options-ask {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--color-titlebar-border, #2d2d30);
-}
-
-.options-steering {
+.options-round-steering {
   flex: 1 1 auto;
-  box-sizing: border-box;
-  resize: none;
-  padding: 7px 9px;
-  font-family: var(--font-chrome, system-ui, sans-serif);
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--color-text, #e6e6e6);
-  background: var(--color-comment-bg, #1f1f23);
-  border: 1px solid var(--color-titlebar-border, #2d2d30);
-  border-radius: 6px;
-}
-
-.options-steering:focus-visible {
-  outline: none;
-  border-color: var(--color-accent, #4fa3e0);
-}
-
-.options-body {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 14px;
-}
-
-.options-empty {
-  max-width: 52ch;
-  margin: 24px auto;
-  font-family: var(--font-chrome, system-ui, sans-serif);
-  font-size: 12.5px;
-  line-height: 1.6;
-  color: var(--color-text-muted, #8a8a8e);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 400;
 }
 
 .options-round + .options-round {

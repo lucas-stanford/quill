@@ -19,6 +19,8 @@ import { dirname, join } from "node:path";
 import type {
   BriefComment,
   BriefEdit,
+  BriefPoll,
+  OptionTarget,
   QueuedRevision,
   RevisionBrief,
   RevisionScope,
@@ -201,10 +203,59 @@ export function validateRevisionBrief(value: unknown, where = "brief"): BriefRes
       const instruction = requireString(raw.instruction, `${where}.instruction`);
       if (instruction.trim().length > 0) brief.instruction = instruction;
     }
+    if (raw.polls !== undefined && raw.polls !== null) {
+      const polls = optionalArray(raw.polls, `${where}.polls`).map((poll, i) =>
+        readPoll(poll, `${where}.polls[${i}]`),
+      );
+      if (polls.length > 0) brief.polls = polls;
+    }
     return brief;
   });
 
   return result.ok ? { ok: true, brief: result.value } : { ok: false, reason: result.reason };
+}
+
+/**
+ * One request for candidate names.
+ *
+ * The target is required rather than defaulted here: this is the field that
+ * decides what a chosen name overwrites, and quietly treating a malformed one
+ * as "the title" is how a poll about a character renames the whole document.
+ */
+function readPoll(value: unknown, where: string): BriefPoll {
+  const raw = requireRecord(value, where);
+  const id = requireString(raw.id, `${where}.id`);
+  if (id.trim().length === 0) fail(`${where}.id must not be empty`);
+
+  const target = requireRecord(raw.target, `${where}.target`);
+  const kind = requireString(target.kind, `${where}.target.kind`);
+  let resolved: OptionTarget;
+  if (kind === "title") {
+    resolved = { kind: "title" };
+  } else if (kind === "text") {
+    const text = requireString(target.value, `${where}.target.value`);
+    if (text.trim().length === 0) fail(`${where}.target.value must not be empty`);
+    resolved = { kind: "text", value: text };
+  } else {
+    fail(`${where}.target.kind must be "title" or "text"`);
+  }
+
+  const poll: BriefPoll = {
+    id,
+    subject: requireString(raw.subject, `${where}.subject`),
+    target: resolved!,
+  };
+  if (raw.steering !== undefined && raw.steering !== null) {
+    const steering = requireString(raw.steering, `${where}.steering`);
+    if (steering.trim().length > 0) poll.steering = steering;
+  }
+  if (raw.exclude !== undefined && raw.exclude !== null) {
+    const exclude = optionalArray(raw.exclude, `${where}.exclude`)
+      .map((value2, i) => requireString(value2, `${where}.exclude[${i}]`))
+      .filter((value2) => value2.trim().length > 0);
+    if (exclude.length > 0) poll.exclude = exclude;
+  }
+  return poll;
 }
 
 export type RevisionRequestResult =
@@ -310,22 +361,35 @@ export function validateRevisionRequest(value: unknown): RevisionRequestResult {
  * `/api/revision`, which is the same payload for agents that would rather curl
  * than write a file).
  *
- * `working` is an optional heartbeat: it flips the browser from "queued" to
- * "working" and restarts the timeout, so a slow agent that keeps saying so is
- * never timed out.
+ * `working` is a heartbeat, and it can carry the work as it happens. An agent
+ * that says nothing until it is finished leaves the reviewer watching a spinner
+ * for minutes with no way to tell a careful revision from a hung one — so a
+ * `working` reply may bring a line about what is being done now, the ids of the
+ * notes already dealt with, and the document as it currently stands. Each one
+ * also restarts the clock, so an agent that keeps talking is never timed out.
  */
 export interface AgentResponse {
   /** Must equal the `id` from the request file — a stale reply is ignored. */
   id: string;
   status: "working" | "done" | "failed" | "cancelled";
   /**
-   * Optional. In attached mode the plan on disk is the deliverable; supply this
-   * only if the revised text differs from what was written, or to save quill a
-   * read. Quill never writes it back to the plan.
+   * The plan as it stands. On `done` this is the deliverable — in attached mode
+   * the plan on disk is too, so supply this only if the revised text differs
+   * from what was written, or to save quill a read. On `working` it is a
+   * snapshot: quill shows it as tracked changes straight away, and the next
+   * snapshot replaces it. Quill never writes either back to the plan.
    */
   markdown?: string;
   /** Required in spirit when `status` is `failed` — shown to the reviewer. */
   error?: string;
+  /** One line, present tense: what is being done right now. */
+  note?: string;
+  /**
+   * Ids of the comments and feedback notes dealt with so far, from the brief.
+   * Cumulative or incremental both work — quill takes the union, so an agent
+   * can resend the whole list every time without closing anything twice.
+   */
+  resolved?: string[];
 }
 
 export type AgentResponseResult =
@@ -351,6 +415,15 @@ export function validateAgentResponse(value: unknown, where = "response"): Agent
     }
     if (raw.error !== undefined && raw.error !== null) {
       response.error = requireString(raw.error, `${where}.error`);
+    }
+    if (raw.note !== undefined && raw.note !== null) {
+      response.note = requireString(raw.note, `${where}.note`);
+    }
+    if (raw.resolved !== undefined && raw.resolved !== null) {
+      const ids = optionalArray(raw.resolved, `${where}.resolved`) ?? [];
+      response.resolved = ids.map((id, at) =>
+        requireString(id, `${where}.resolved[${at}]`),
+      );
     }
     return response;
   });

@@ -110,3 +110,70 @@ describe("readOptions / writeOptions", () => {
     removeWorkspace(ws);
   });
 });
+
+describe("what a poll is about", () => {
+  it("keeps a text target, so a pick renames what was asked about", () => {
+    const manifest = parseOptions({
+      version: 1,
+      polls: [
+        {
+          id: "p1",
+          subject: "the courier",
+          target: { kind: "text", value: "Vera" },
+          options: [{ id: "o1", value: "Juno" }],
+        },
+      ],
+    });
+
+    assert.deepEqual(manifest.polls[0].target, { kind: "text", value: "Vera" });
+  });
+
+  it("keeps an explicit title target", () => {
+    const manifest = parseOptions({
+      version: 1,
+      polls: [
+        { id: "p1", target: { kind: "title" }, options: [{ id: "o1", value: "Palaver" }] },
+      ],
+    });
+
+    assert.deepEqual(manifest.polls[0].target, { kind: "title" });
+  });
+
+  it("treats a round with no target as a round about the title", () => {
+    // Every poll meant the document before targets existed, and a round
+    // written by an older quill must keep meaning it.
+    const manifest = parseOptions({
+      version: 1,
+      polls: [{ id: "p1", options: [{ id: "o1", value: "Palaver" }] }],
+    });
+
+    assert.equal(manifest.polls[0].target, undefined);
+  });
+
+  it("drops a malformed target without losing the candidates beside it", () => {
+    for (const target of [{ kind: "text" }, { kind: "text", value: "  " }, { kind: "nope" }, "title"]) {
+      const manifest = parseOptions({
+        version: 1,
+        polls: [{ id: "p1", target, options: [{ id: "o1", value: "Palaver" }] }],
+      });
+
+      assert.equal(manifest.polls.length, 1, `round survives ${JSON.stringify(target)}`);
+      assert.equal(manifest.polls[0].target, undefined);
+    }
+  });
+
+  it("survives a write and a read", () => {
+    const manifest = parseOptions({
+      version: 1,
+      polls: [
+        {
+          id: "p1",
+          target: { kind: "text", value: "Vera" },
+          options: [{ id: "o1", value: "Juno" }],
+        },
+      ],
+    });
+
+    assert.deepEqual(parseOptions(JSON.parse(serializeOptions(manifest))), manifest);
+  });
+});

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppShell, Ribbon } from "./shell";
-import { PlanEditor, usePlanEditor } from "./editor";
+import { PlanEditor, usePlanEditor, useUndoRedo } from "./editor";
 import { useLivePlan } from "./live";
 import { useAnnotations, CommentRail } from "./annotations";
 import { useTrackedChanges } from "./tracking";
@@ -14,7 +14,7 @@ import {
   ReconcileBanner,
 } from "./companions";
 import { FeedbackRail } from "./feedback";
-import { useOptions, OptionsPanel, retitle } from "./options";
+import { useOptions, PollList, applyChoice } from "./options";
 import { ConflictError, fetchPlan, savePlan } from "./api";
 import type { LoadStatus, PlanResponse, SaveState } from "./types";
 
@@ -35,6 +35,15 @@ export default function App() {
   const [status, setStatus] = useState<LoadStatus>("loading");
   const [error, setError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
+  /**
+   * Whether the document about to be loaded is the reviewer's own doing.
+   *
+   * Set in the same update as the markdown it describes. Only their own
+   * replacements belong in the undo stack: undoing a reload of somebody else's
+   * write would restore a document the file no longer has, and autosave would
+   * then put it back over the top of theirs.
+   */
+  const [docUndoable, setDocUndoable] = useState(false);
 
   const revisionRef = useRef("");
   const pendingRef = useRef<string | null>(null);
@@ -49,8 +58,7 @@ export default function App() {
         setDoc(p);
         revisionRef.current = p.revision;
         setStatus("ready");
-      })
-      .catch((e: unknown) => {
+      })      .catch((e: unknown) => {
         if (cancelled) return;
         setError(e instanceof Error ? e.message : String(e));
         setStatus("error");
@@ -112,7 +120,15 @@ export default function App() {
     [flush],
   );
 
-  const editor = usePlanEditor({ markdown: doc?.markdown ?? "", onChange: handleChange });
+  const editor = usePlanEditor({
+    markdown: doc?.markdown ?? "",
+    onChange: handleChange,
+    undoable: docUndoable,
+  });
+
+  // Undo has to reach the document from wherever the focus happens to be:
+  // every replacement worth taking back is made from a control outside it.
+  useUndoRedo(editor);
 
   const annotations = useAnnotations({ editor, enabled: status === "ready" });
   const tracking = useTrackedChanges({ editor, enabled: status === "ready" });
@@ -134,7 +150,15 @@ export default function App() {
    * research is most likely to have moved.
    */
   const options = useOptions(status === "ready");
-  const [namesOpen, setNamesOpen] = useState(false);
+
+  /*
+   * The agent writes candidates to a file beside the plan, because its reply
+   * has to be the document and nothing else. So the answer arrives when the
+   * revision does, and that is the moment to go and read it.
+   */
+  useEffect(() => {
+    if (revision.status === "done") options.reload();
+  }, [revision.status, options]);
 
   const reconcile = useReconcile({
     enabled: status === "ready",
@@ -152,6 +176,8 @@ export default function App() {
         return;
       }
       void fetchPlan().then((p) => {
+        // Somebody else's write. Not undoable — see `docUndoable`.
+        setDocUndoable(false);
         setDoc(p);
         revisionRef.current = p.revision;
         setSaveState("idle");
@@ -187,56 +213,44 @@ export default function App() {
       saveState={saveState}
       toolbar={status === "ready" ? <Ribbon editor={editor} /> : null}
       commentRail={
-        status === "ready" ? <CommentRail annotations={annotations} /> : null
+        status === "ready" ? (
+          <>
+            <CommentRail annotations={annotations} />
+            {/*
+             * After the rail's positioned layer, never before it: that layer
+             * places every bubble against text coordinates measured from its
+             * own top, so anything stacked above it moves every anchor in the
+             * document.
+             */}
+            <PollList
+              options={options}
+              onUse={(poll, value) => {
+                /*
+                 * A poll rewrites what it was about — the document's title, or
+                 * every mention of the placeholder the round was called on.
+                 * Through the load path, not the editor's API: `usePlanEditor`
+                 * owns replacing content and keeps the source map in step, so
+                 * untouched blocks still round-trip byte-identically. Marked
+                 * undoable, because it is the reviewer's own edit.
+                 */
+                const current = pendingRef.current ?? doc?.markdown ?? "";
+                const next = applyChoice(current, poll.target, value);
+                if (next === current) return;
+                setDocUndoable(true);
+                setDoc((prev) => (prev ? { ...prev, markdown: next } : prev));
+                handleChange(next);
+              }}
+            />
+          </>
+        ) : null
       }
       feedbackRail={
         status === "ready" ? <FeedbackRail annotations={annotations} /> : null
       }
       tracking={status === "ready" ? tracking : undefined}
       approveButton={status === "ready" ? <ApproveButton approve={approve} /> : null}
-      companionTabs={
-        status === "ready" ? (
-          <>
-            <CompanionTabs companions={companions} />
-            <button
-              type="button"
-              className="companion-tab"
-              onClick={() => setNamesOpen(true)}
-              title="Ask for candidate names"
-            >
-              Names
-            </button>
-          </>
-        ) : null
-      }
-      companionDrawer={
-        <>
-          <CompanionDrawer companions={companions} />
-          <OptionsPanel
-            options={options}
-            open={namesOpen}
-            onClose={() => setNamesOpen(false)}
-            onUse={(value) => {
-              /*
-               * Taking a name rewrites the document's own title, which is the
-               * only place a plan states what it is called. It goes through
-               * the editor's normal change path, so it autosaves and is undoable
-               * like anything else the reviewer typed.
-               */
-              const current = pendingRef.current ?? doc?.markdown ?? "";
-              const next = retitle(current, value);
-              if (next !== current) {
-                // Through the load path, not the editor's API: `usePlanEditor`
-                // owns replacing content and keeps the source map in step, so
-                // untouched blocks still round-trip byte-identically.
-                setDoc((prev) => (prev ? { ...prev, markdown: next } : prev));
-                handleChange(next);
-              }
-              setNamesOpen(false);
-            }}
-          />
-        </>
-      }
+      companionTabs={status === "ready" ? <CompanionTabs companions={companions} /> : null}
+      companionDrawer={<CompanionDrawer companions={companions} />}
       banner={
         <ReconcileBanner
           stale={reconcile.stale}
@@ -255,6 +269,7 @@ export default function App() {
         status === "ready" ? (
           <UpdateWithAI
             revision={revision}
+            existingPolls={options.polls}
             /*
              * Everything the brief would carry. Feedback notes count: they are
              * a first-class part of the brief, and leaving them out disabled

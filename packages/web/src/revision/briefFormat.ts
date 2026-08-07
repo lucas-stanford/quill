@@ -24,7 +24,7 @@
  * plan text for instructions to it.
  */
 
-import type { BriefComment, RevisionBrief } from "../types";
+import type { BriefComment, BriefPoll, RevisionBrief } from "../types";
 import { pairBriefEdits } from "./briefLocate";
 import type { BriefEditItem } from "./briefLocate";
 
@@ -79,6 +79,7 @@ export function isBriefEmpty(brief: RevisionBrief): boolean {
     brief.comments.length === 0 &&
     brief.edits.length === 0 &&
     feedbackNotes(brief).length === 0 &&
+    (brief.polls ?? []).length === 0 &&
     (brief.instruction ?? "").trim() === ""
   );
 }
@@ -192,6 +193,75 @@ function answerContract(): string {
   ].join("\n");
 }
 
+/** Where an agent writes candidate names. Not the plan — see `formatPolls`. */
+export const OPTIONS_PATH = "research/options.json";
+
+/**
+ * The reviewer wants naming help as part of this round.
+ *
+ * The candidates cannot come back in the reply, because the reply is the
+ * document and nothing else — a rule worth more than the convenience of
+ * bundling them. So they go to a file beside the plan, which is also where the
+ * previous rounds already are, and quill picks them up when the revision lands.
+ *
+ * The reviewer picks. An agent that fills in `chosen` has taken the decision
+ * the whole poll exists to leave open.
+ */
+function formatPolls(polls: readonly BriefPoll[]): string {
+  const lines = [
+    `=== ALSO: CANDIDATE NAMES (${polls.length}) ===`,
+    "",
+    "As well as the revision above, the reviewer wants options for the names below.",
+    `Write them to \`${OPTIONS_PATH}\` — NOT into the plan, and NOT into your reply.`,
+    "Add one new poll per request to the `polls` array and keep every poll already",
+    "in the file: the rounds are the argument, not just the answer.",
+    "",
+    "```json",
+    '{ "version": 1, "polls": [',
+    '  { "id": "<the id given below>", "subject": "<as given>",',
+    '    "target": <the target object given below>,',
+    '    "steering": "<as given, or \\"\\">",',
+    '    "createdAt": "<ISO 8601>", "options": [',
+    '      { "id": "o1", "value": "Steel Sunrise",',
+    '        "note": "Why it works, in one line.", "dropped": false } ] } ] }',
+    "```",
+    "",
+    "Rules:",
+    "- Eight to twelve candidates per request. Fewer is not a choice; more is a list",
+    "  nobody reads.",
+    "- Every candidate gets a `note` saying why it works. One with no argument behind",
+    "  it cannot be weighed against one that has.",
+    "- Spread them out: eight variations of one idea is one candidate.",
+    "- Copy `id`, `subject` and `target` through exactly as given. They are how the",
+    "  reviewer's pick finds the thing it renames.",
+    "- Do not set `chosen`. Picking is the reviewer's job, not yours.",
+    "- Do not rename anything in the plan yourself. Offering is the whole request.",
+  ];
+
+  for (const poll of polls) {
+    lines.push("", `--- ${poll.id} ---`);
+    lines.push(`Naming: ${poll.subject}`);
+    lines.push(
+      poll.target.kind === "title"
+        ? "Target: the document's own title. `\"target\": {\"kind\":\"title\"}`"
+        : `Target: every mention of ${quoted(poll.target.value)} in the plan. ` +
+          `\`"target": {"kind":"text","value":${JSON.stringify(poll.target.value)}}\`` +
+          " — so the candidates have to read correctly in those sentences.",
+    );
+    if (poll.steering) lines.push(`The reviewer asked for: ${poll.steering}`);
+    const exclude = poll.exclude ?? [];
+    if (exclude.length > 0) {
+      lines.push(
+        `Already offered for this — do not repeat any of them: ${exclude
+          .map((value) => quoted(value))
+          .join(", ")}`,
+      );
+    }
+  }
+
+  return lines.join("\n");
+}
+
 /**
  * Render the brief as the prompt the agent is given.
  *
@@ -280,6 +350,11 @@ export function formatBriefPrompt(brief: RevisionBrief): string {
         feedback.map((note, i) => `${i + 1}. ${note}`).join("\n\n"),
       ].join("\n"),
     );
+  }
+
+  const polls = brief.polls ?? [];
+  if (polls.length > 0) {
+    sections.push(formatPolls(polls));
   }
 
   const note = (brief.instruction ?? "").trim();
